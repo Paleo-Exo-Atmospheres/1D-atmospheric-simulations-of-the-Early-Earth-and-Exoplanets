@@ -7,15 +7,15 @@
 
 This repository accompanies the paper **"Simulations of the Evolving Ozone Layer: Implications for the Early Earth and Exoplanets"** It contains the simulation data, model configuration files, and analysis scripts used to study how Earth's atmosphere — and in particular its ozone (O₃) layer — responds to changing atmospheric oxygen levels from the **Proterozoic through the Phanerozoic to the present day**.
 
-The central scientific question is how atmospheric photochemistry and ozone evolve as O₂ rises from near-zero levels in the Proterozoic (the "faint young Sun" era) through the oxygenation events of the Phanerozoic to modern conditions. We simulate this evolution using four independent one-dimensional (1D) photochemical models, benchmarked against **WACCM6**, a configuration of the Community Earth System Model (CESM) that couples interactive chemistry with a three-dimensional general circulation model.
+The central scientific question is how atmospheric photochemistry and ozone evolve as O₂ is increased from 0.1% the present atmospheric level (PAL) to modern day concentrations. In terms of Earth's history, this roughly corresponds to the early Proterozoic (~2.4 Gyr onward) through the oxygenation events of the Phanerozoic to modern conditions. We simulate this evolution using four independent one-dimensional (1D) photochemical models, compared against **WACCM6**, a 3D chemistry-climate model. WACCM6 is a high-top extension of a configuration of the Community Earth System Model (CESM2) that includes interactive atmospheric chemistry.
 
-Across thousands of atmospheric states, we systematically vary:
+We systematically vary:
 
 1. **Atmospheric oxygenation** — O₂ boundary conditions from 0.1% to 150% of Present Atmospheric Level (PAL), spanning Proterozoic anoxia through Phanerozoic and modern oxygenation.
-2. **Solar evolution** — the changing solar UV spectrum and bolometric flux from 4.0 Ga to the present day (the faint young Sun problem).
-3. **Thermal structure** — pressure–temperature (P–T) profiles taken from WACCM6 for each oxygenation state, ensuring the 1D models use atmospheres consistent with 3D climate.
+2. **Solar evolution** — the changing solar UV spectrum and bolometric flux from 4.0 Ga to the present day (the faint young Sun problem) in some of the 1D models.
+3. **Thermal structure** — pressure–temperature (P–T) profiles taken from WACCM6 for each oxygenation state, ensuring the 1D models use atmospheres somewhat consistent with the 3D climate.
 4. **Lower-boundary fluxes** — surface emissions of CH₄, N₂O, and related reduced gases.
-5. **Water vapour** — tropospheric humidity scaling (e.g. 60% relative humidity perturbations).
+5. **Water vapour** — tropospheric humidity scaling (e.g. 40% relative humidity perturbations).
 6. **Surface albedo** — values from 0.06 to 0.30.
 7. **Solar zenith angle (SZA)** — 45°, 48.2°, and 60°, with appropriate diurnal averaging factors.
 
@@ -66,6 +66,7 @@ Solar-age labels such as `Sun_0.0Ga` (present Sun) and `Sun_2.4Ga` (younger Sun)
 ├── Kasting_1D_model/       # Kasting 1D model output
 ├── Python/                 # Analysis and plotting scripts
 ├── PSG/                    # Planetary Spectrum Generator post-processing
+├── Plots/                  # Interactive explorer
 └── README.md
 ```
 
