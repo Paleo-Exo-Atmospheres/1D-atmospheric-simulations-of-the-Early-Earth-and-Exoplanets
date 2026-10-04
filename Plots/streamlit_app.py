@@ -44,8 +44,9 @@ PAL_COLOURS = {
 
 STYLE_COMPARE = "Compare models"
 STYLE_MAP = "WACCM latitude–pressure"
-STYLE_LAT = "WACCM vs latitude"
 STYLE_SPECTRUM = "Transmission spectra"
+EARTH_WAVE_MIN = 0.2
+EARTH_WAVE_MAX = 20.0
 
 O3_BAND = "rgba(22, 101, 52, 0.18)"
 O2_BAND = "rgba(29, 78, 216, 0.16)"
@@ -257,7 +258,7 @@ def axis_title(var_id: str, quantity: str) -> str:
     if quantity == "density":
         return f"{base['label']} number density [molecules m⁻³]"
     if base["kind"] in ("mixing", "nox", "hox"):
-        return f"{base['label']} mixing ratio [mol mol⁻¹]"
+        return f"{base['label']} volume mixing ratio"
     if base["kind"] == "j":
         return f"{base['label']} [s⁻¹]"
     meta = display_meta(var_id, quantity)
@@ -445,14 +446,66 @@ def figure_compare(pals: list[str], models: list[str], sza: str, var_id: str, sh
     return fig, notes
 
 
+def map_shape(count: int) -> tuple[int, int]:
+    """Two columns so each latitude–pressure panel can carry its own colour bar."""
+    if count <= 1:
+        return 1, 1
+    return int(np.ceil(count / 2)), 2
+
+
+def map_colorscale(var_id: str) -> str:
+    """Sequential fields follow the Early_Earth.py latitude–pressure figures."""
+    if var_id in ("CLDLIQ", "CLDICE"):
+        return "Blues_r"
+    if var_id in ("U", "V", "T"):
+        return "RdBu_r"
+    if str(var_id).startswith("jo"):
+        return "YlGnBu"
+    return "YlOrRd"
+
+
+def attach_colorbars(fig) -> None:
+    """Place one colour bar against the right edge of each map panel."""
+    for trace in fig.data:
+        xname = getattr(trace, "xaxis", None) or "x"
+        yname = getattr(trace, "yaxis", None) or "y"
+        xkey = "xaxis" if xname == "x" else "xaxis" + xname[1:]
+        ykey = "yaxis" if yname == "y" else "yaxis" + yname[1:]
+        xdomain = fig.layout[xkey].domain
+        ydomain = fig.layout[ykey].domain
+        if xdomain is None or ydomain is None:
+            continue
+        title = ""
+        if trace.colorbar is not None and trace.colorbar.title is not None:
+            title = trace.colorbar.title.text or ""
+        trace.update(
+            showscale=True,
+            colorbar=dict(
+                title=dict(text=title, side="right", font=dict(size=12, color="black")),
+                x=xdomain[1] + 0.012,
+                xref="paper",
+                y=(ydomain[0] + ydomain[1]) / 2.0,
+                yref="paper",
+                len=max((ydomain[1] - ydomain[0]) * 0.86, 0.12),
+                lenmode="fraction",
+                thickness=14,
+                outlinewidth=0,
+                tickfont=dict(size=11, color="black"),
+            ),
+        )
+
+
 def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[go.Figure | None, list[str]]:
     meta = display_meta(var_id, quantity)
-    rows, cols = panel_shape(len(pals))
+    rows, cols = map_shape(len(pals))
+    spacing = {"horizontal_spacing": 0.18}
+    if rows > 1:
+        spacing["vertical_spacing"] = 0.16
     fig = make_subplots(
         rows=rows,
         cols=cols,
         subplot_titles=[data.pal_label(pal) for pal in pals],
-        **subplot_spacing(rows),
+        **spacing,
     )
     notes = []
     drawn = 0
@@ -488,21 +541,16 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
             y_pressure = np.nanmean(pressure, axis=1)
         else:
             y_pressure = pressure
-        if var_id in ("CLDLIQ", "CLDICE"):
-            colours = "Blues_r"
-        elif diverging:
-            colours = "RdBu_r"
-        else:
-            colours = "Viridis"
+        colours = map_colorscale(var_id)
         contour = dict(
             x=profile["lat"],
             y=y_pressure,
             z=plot_z,
             colorscale=colours,
-            colorbar=dict(title=colour_title, len=0.45, y=0.8 - 0.35 * (row - 1)),
+            colorbar=dict(title=dict(text=colour_title)),
             line=dict(width=0),
             contours=dict(coloring="fill"),
-            showscale=(index == 0),
+            showscale=True,
             hovertemplate="lat %{x:.1f}°<br>%{y:.3g} hPa<br>%{z:.3g}<extra></extra>",
         )
         if zmin is not None and zmax is not None and not diverging:
@@ -528,61 +576,10 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
         fig.update_yaxes(title_text="Pressure [hPa]", row=row, col=1)
     fig.update_layout(
         template="plotly_white",
-        height=max(480, 320 * rows),
-        margin=dict(l=72, r=40, t=48, b=56),
+        height=max(480, 360 * rows),
+        margin=dict(l=72, r=120, t=56, b=56),
     )
-    white_figure(fig)
-    return fig, notes
-
-
-def figure_latitude(pals: list[str], sza: str, var_id: str, pressure_hpa: float, quantity: str) -> tuple[go.Figure | None, list[str]]:
-    meta = display_meta(var_id, quantity)
-    fig = go.Figure()
-    notes = []
-    for pal in pals:
-        stamp = data.source_stamp("WACCM6", pal, sza, var_id)
-        if stamp.startswith("missing:"):
-            notes.append(f"No WACCM6 file for {data.pal_label(pal)}.")
-            continue
-        profile = presented_profile(cached_profile("WACCM6", pal, sza, var_id, stamp), quantity)
-        if profile is None:
-            notes.append(f"WACCM6 {data.pal_label(pal)} could not be read.")
-            continue
-        sliced = data.slice_zonal(profile, pressure_hpa)
-        if sliced is None:
-            notes.append(f"{pressure_hpa:g} hPa is outside the WACCM6 {data.pal_label(pal)} grid.")
-            continue
-        latitude, values = sliced
-        values = positive(values, meta["log"])
-        fig.add_trace(
-            go.Scatter(
-                x=latitude,
-                y=values,
-                mode="lines",
-                name=data.pal_label(pal),
-                line=dict(color=PAL_COLOURS[pal], width=2.4),
-            )
-        )
-    if len(fig.data) == 0:
-        return None, notes
-    fig.update_layout(
-        template="plotly_white",
-        height=560,
-        xaxis_title="Latitude [°]",
-        yaxis_title=axis_title(var_id, quantity),
-        yaxis_type="log" if meta["log"] else "linear",
-        xaxis_range=[-90, 90],
-        legend=dict(orientation="h", yanchor="bottom", y=1.16, x=0),
-        margin=dict(l=72, r=24, t=88, b=56),
-        title=f"WACCM6 zonal mean at {pressure_hpa:g} hPa",
-    )
-    limits = x_limits(var_id, quantity)
-    if limits is not None:
-        low, high = limits
-        if meta["log"]:
-            fig.update_yaxes(range=[np.log10(low), np.log10(high)])
-        else:
-            fig.update_yaxes(range=[low, high])
+    attach_colorbars(fig)
     white_figure(fig)
     return fig, notes
 
@@ -669,10 +666,11 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
                         col=col,
                     )
             else:
+                earth = (wavelength >= EARTH_WAVE_MIN) & (wavelength <= EARTH_WAVE_MAX)
                 fig.add_trace(
                     go.Scatter(
-                        x=wavelength,
-                        y=altitude,
+                        x=wavelength[earth],
+                        y=altitude[earth],
                         mode="lines",
                         name=model,
                         legendgroup=model,
@@ -689,9 +687,14 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
             fig.update_xaxes(range=[1.5, 12.0], title_text="Wavelength [µm]", row=row, col=2)
             fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
         else:
-            finite = np.concatenate([series[model][0] for model in series])
-            add_bands(fig, row, 1, float(np.nanmin(finite)), float(np.nanmax(finite)), ymax)
-            fig.update_xaxes(type="log", title_text="Wavelength [µm]", row=row, col=1)
+            add_bands(fig, row, 1, EARTH_WAVE_MIN, EARTH_WAVE_MAX, ymax)
+            fig.update_xaxes(
+                type="log",
+                range=[np.log10(EARTH_WAVE_MIN), np.log10(EARTH_WAVE_MAX)],
+                title_text="Wavelength [µm]",
+                row=row,
+                col=1,
+            )
             fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
     title = "Proxima Centauri b transmission spectra" if proxima else "Earth transmission spectra"
     fig.update_layout(
@@ -724,7 +727,7 @@ def main() -> None:
         st.header("Explorer")
         style = st.selectbox(
             "Plot style",
-            [STYLE_COMPARE, STYLE_MAP, STYLE_LAT, STYLE_SPECTRUM],
+            [STYLE_COMPARE, STYLE_MAP, STYLE_SPECTRUM],
         )
         variable_labels = {key: data.VARIABLES[key]["label"] for key in data.VARIABLES}
         var_id = st.selectbox(
@@ -744,7 +747,6 @@ def main() -> None:
         sza = "48.2"
         models = list(data.MODEL_ORDER)
         show_spread = False
-        pressure_level = 10.0
         planet = "proxima"
         quantity = "mixing"
         if var_id in data.CHEMICAL_IDS and style != STYLE_SPECTRUM:
@@ -760,12 +762,6 @@ def main() -> None:
                 models = st.multiselect("Models", data.MODEL_ORDER, default=data.MODEL_ORDER)
             if style == STYLE_COMPARE:
                 show_spread = st.checkbox("WACCM6 range across latitude", value=True)
-            if style == STYLE_LAT:
-                pressure_level = st.select_slider(
-                    "Pressure level [hPa]",
-                    options=[1000, 300, 100, 30, 10, 3, 1, 0.3, 0.1, 0.01],
-                    value=10,
-                )
         else:
             planet = st.radio(
                 "Planet",
@@ -785,7 +781,7 @@ def main() -> None:
         figure, notes = figure_spectra(planet, pals)
         if planet == "earth":
             st.caption(
-                "Earth spectra follow Early_Earth_plots.py. "
+                "Earth spectra follow Early_Earth_plots.py and stop at 20 µm. "
                 "VULCAN has 150% PAL and no 100% PAL Earth spectrum. "
                 "This set has no Earth WACCM6 transmission spectrum."
             )
@@ -794,7 +790,7 @@ def main() -> None:
                 "Proxima Centauri b spectra for 100%, 10%, 1%, and 0.1% PAL. "
                 "The paper figure is the 1% PAL case. Shading marks O₃ and O₂ bands."
             )
-    elif var_id in ZONAL_FIELDS and style != STYLE_LAT:
+    elif var_id in ZONAL_FIELDS:
         shown = display_meta(var_id, quantity)
         figure, notes = figure_maps(pals, sza, var_id, quantity)
         cloud = var_id in ("CLDLIQ", "CLDICE")
@@ -813,10 +809,6 @@ def main() -> None:
         shown = display_meta(var_id, quantity)
         figure, notes = figure_maps(pals, sza, var_id, quantity)
         st.caption(f"WACCM6 zonal mean of {shown['label']}. {family_caption(var_id, quantity)}")
-    else:
-        shown = display_meta(var_id, quantity)
-        figure, notes = figure_latitude(pals, sza, var_id, float(pressure_level), quantity)
-        st.caption(f"WACCM6 zonal mean of {shown['label']} at {float(pressure_level):g} hPa.")
 
     if figure is None:
         st.warning("Nothing to plot for this selection.")
@@ -873,7 +865,7 @@ def main() -> None:
 
 def profile_caption(var_id: str, sza: str, quantity: str) -> str:
     meta = display_meta(var_id, quantity)
-    text = f"{meta['label']} [{meta['units']}] at a 1D solar zenith angle of {sza}°."
+    text = f"{axis_title(var_id, quantity)} at a 1D solar zenith angle of {sza}°."
     if not meta["compare"]:
         text += " U, V, cloud liquid, and cloud ice are WACCM6 fields."
     extra = family_caption(var_id, quantity)
