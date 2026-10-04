@@ -50,16 +50,18 @@ EARTH_WAVE_MAX = 20.0
 
 O3_BAND = "rgba(22, 101, 52, 0.18)"
 O2_BAND = "rgba(29, 78, 216, 0.16)"
+# x0, x1, label, fill, colour, label x (µm), label height as a fraction of the panel.
+# The two visible O₂ bands share one label. O₂–X sits at 6.7 µm, below the O₃ label at 5.8 µm.
 BANDS = (
-    (0.20, 0.33, "O₃", O3_BAND, "#166534"),
-    (0.48, 1.20, "O₃", O3_BAND, "#166534"),
-    (4.65, 5.00, "O₃", O3_BAND, "#166534"),
-    (5.70, 5.90, "O₃", O3_BAND, "#166534"),
-    (8.20, 10.20, "O₃", O3_BAND, "#166534"),
-    (0.67, 0.70, "O₂", O2_BAND, "#1d4ed8"),
-    (0.75, 0.78, "O₂", O2_BAND, "#1d4ed8"),
-    (1.25, 1.30, "O₂", O2_BAND, "#1d4ed8"),
-    (5.30, 7.00, "O₂–X", O2_BAND, "#1d4ed8"),
+    (0.20, 0.33, "O₃", O3_BAND, "#166534", None, 0.96),
+    (0.48, 1.20, "O₃", O3_BAND, "#166534", None, 0.96),
+    (4.65, 5.00, "O₃", O3_BAND, "#166534", None, 0.96),
+    (5.70, 5.90, "O₃", O3_BAND, "#166534", 5.80, 0.96),
+    (8.20, 10.20, "O₃", O3_BAND, "#166534", None, 0.96),
+    (0.67, 0.70, "O₂", O2_BAND, "#1d4ed8", 0.73, 0.78),
+    (0.75, 0.78, None, O2_BAND, "#1d4ed8", None, 0.78),
+    (1.25, 1.30, "O₂", O2_BAND, "#1d4ed8", None, 0.78),
+    (5.30, 7.00, "O₂–X", O2_BAND, "#1d4ed8", 6.70, 0.78),
 )
 
 st.markdown(
@@ -584,33 +586,49 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
     return fig, notes
 
 
-def add_bands(fig, row: int, col: int, xmin: float, xmax: float, ymax: float, log_x: bool = False) -> None:
-    def place(value: float) -> float:
-        return float(np.log10(value)) if log_x else value
-
-    for x0, x1, label, fill, colour in BANDS:
+def add_bands(fig, row: int, col: int, xmin: float, xmax: float, ymax: float) -> None:
+    for x0, x1, label, fill, colour, label_x, height in BANDS:
         if x1 < xmin or x0 > xmax:
             continue
         fig.add_vrect(
-            x0=place(max(x0, xmin)),
-            x1=place(min(x1, xmax)),
+            x0=max(x0, xmin),
+            x1=min(x1, xmax),
             fillcolor=fill,
             line_width=0,
             layer="below",
             row=row,
             col=col,
         )
-        midpoint = (x0 + x1) / 2
-        if xmin <= midpoint <= xmax:
-            fig.add_annotation(
-                x=place(min(max(midpoint, xmin), xmax)),
-                y=ymax * 0.97,
-                text=label,
-                showarrow=False,
-                font=dict(color=colour, size=13),
-                row=row,
-                col=col,
-            )
+        if not label:
+            continue
+        anchor = (x0 + x1) / 2 if label_x is None else label_x
+        if not (xmin <= anchor <= xmax):
+            continue
+        fig.add_annotation(
+            x=anchor,
+            y=ymax * height,
+            text=label,
+            showarrow=False,
+            font=dict(color=colour, size=13),
+            row=row,
+            col=col,
+        )
+
+
+def spectrum_panels(planet: str) -> tuple[tuple[float, float], tuple[float, float]]:
+    """Visible panel, then infrared panel. Earth stops at 20 µm."""
+    if planet == "proxima":
+        return ((0.2, 1.5), (1.5, 12.0))
+    return ((0.2, 1.5), (1.5, EARTH_WAVE_MAX))
+
+
+def center_row_titles(fig, n_rows: int) -> None:
+    """One oxygen-level title, centred across the two panels in that row."""
+    for row in range(n_rows):
+        left = fig.layout.annotations[row * 2]
+        right = fig.layout.annotations[row * 2 + 1]
+        left.update(x=(left.x + right.x) / 2, xanchor="center")
+        right.update(text="")
 
 
 def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list[str]]:
@@ -624,98 +642,51 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
         available.append((pal, series))
     if not available:
         return None, notes
-    proxima = planet == "proxima"
     n_pal = len(available)
-    if proxima:
-        fig = make_subplots(
-            rows=n_pal,
-            cols=2,
-            subplot_titles=[
-                title
-                for pal, _series in available
-                for title in (f"{data.pal_label(pal)}  ·  0.2–1.5 µm", f"{data.pal_label(pal)}  ·  1.5–12 µm")
-            ],
-            shared_yaxes=True,
-            horizontal_spacing=0.06,
-        )
-        panels = ((0.2, 1.5), (1.5, 12.0))
-        ymax = 80
-    else:
-        fig = make_subplots(
-            rows=n_pal,
-            cols=1,
-            subplot_titles=[data.pal_label(pal) for pal, _series in available],
-        )
-        panels = None
-        ymax = 85
-    for row, (pal, series) in enumerate(available, start=1):
+    panels = spectrum_panels(planet)
+    ymax = 80 if planet == "proxima" else 85
+    spacing = {"horizontal_spacing": 0.06}
+    if n_pal > 1:
+        spacing["vertical_spacing"] = 0.12
+    fig = make_subplots(
+        rows=n_pal,
+        cols=2,
+        subplot_titles=[data.pal_label(pal) for pal, _series in available for _panel in panels],
+        shared_yaxes=True,
+        **spacing,
+    )
+    center_row_titles(fig, n_pal)
+    for row, (_pal, series) in enumerate(available, start=1):
         for model in data.MODEL_ORDER:
             if model not in series:
                 continue
             wavelength, altitude = series[model]
-            if proxima:
-                for col, (xmin, xmax) in enumerate(panels, start=1):
-                    mask = (wavelength >= xmin) & (wavelength <= xmax)
-                    fig.add_trace(
-                        go.Scatter(
-                            x=wavelength[mask],
-                            y=altitude[mask],
-                            mode="lines",
-                            name=model,
-                            legendgroup=model,
-                            showlegend=(row == 1 and col == 1),
-                            line=dict(color=COLOURS[model], width=2.2),
-                        ),
-                        row=row,
-                        col=col,
-                    )
-            else:
-                earth = (wavelength >= EARTH_WAVE_MIN) & (wavelength <= EARTH_WAVE_MAX)
-                shown = wavelength[earth]
+            for col, (xmin, xmax) in enumerate(panels, start=1):
+                mask = (wavelength >= xmin) & (wavelength <= xmax)
                 fig.add_trace(
                     go.Scatter(
-                        x=np.log10(shown),
-                        y=altitude[earth],
+                        x=wavelength[mask],
+                        y=altitude[mask],
                         mode="lines",
                         name=model,
                         legendgroup=model,
-                        showlegend=(row == 1),
-                        customdata=shown,
-                        hovertemplate=model + "<br>%{customdata:.3g} µm<br>%{y:.3g} km<extra></extra>",
+                        showlegend=(row == 1 and col == 1),
                         line=dict(color=COLOURS[model], width=2.2),
                     ),
                     row=row,
-                    col=1,
+                    col=col,
                 )
-        if proxima:
-            add_bands(fig, row, 1, 0.2, 1.5, ymax)
-            add_bands(fig, row, 2, 1.5, 12.0, ymax)
-            fig.update_xaxes(range=[0.2, 1.5], title_text="Wavelength [µm]", row=row, col=1)
-            fig.update_xaxes(range=[1.5, 12.0], title_text="Wavelength [µm]", row=row, col=2)
-            fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
-        else:
-            # Linear axis in log10(µm). A Plotly log axis treats the band
-            # rectangles (for example 8–10 µm) as powers of ten.
-            ticks = (0.2, 0.5, 1, 2, 5, 10, 20)
-            fig.update_xaxes(
-                range=[np.log10(EARTH_WAVE_MIN), np.log10(EARTH_WAVE_MAX)],
-                autorange=False,
-                tickmode="array",
-                tickvals=[np.log10(tick) for tick in ticks],
-                ticktext=[f"{tick:g}" for tick in ticks],
-                title_text="Wavelength [µm]",
-                row=row,
-                col=1,
-            )
-            fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
-            add_bands(fig, row, 1, EARTH_WAVE_MIN, EARTH_WAVE_MAX, ymax, log_x=True)
-    title = "Proxima Centauri b transmission spectra" if proxima else "Earth transmission spectra"
+        for col, (xmin, xmax) in enumerate(panels, start=1):
+            add_bands(fig, row, col, xmin, xmax, ymax)
+            fig.update_xaxes(range=[xmin, xmax], title_text="Wavelength [µm]", row=row, col=col)
+        fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
+    title = "Proxima Centauri b transmission spectra" if planet == "proxima" else "Earth transmission spectra"
     fig.update_layout(
         template="plotly_white",
-        height=max(420, 340 * n_pal),
+        height=max(440, 360 * n_pal),
         title=title,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-        margin=dict(l=60, r=30, t=90, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.08, x=0),
+        margin=dict(l=64, r=28, t=110, b=48),
     )
     white_figure(fig)
     return fig, notes
@@ -794,7 +765,7 @@ def main() -> None:
         figure, notes = figure_spectra(planet, pals)
         if planet == "earth":
             st.caption(
-                "Earth spectra follow Early_Earth_plots.py and stop at 20 µm. "
+                "Earth spectra use the same two panels as Proxima Centauri b, out to 20 µm. "
                 "VULCAN has 150% PAL and no 100% PAL Earth spectrum. "
                 "This set has no Earth WACCM6 transmission spectrum."
             )
