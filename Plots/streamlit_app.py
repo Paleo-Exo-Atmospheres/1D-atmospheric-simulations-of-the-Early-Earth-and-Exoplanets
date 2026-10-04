@@ -584,22 +584,26 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
     return fig, notes
 
 
-def add_bands(fig, row: int, col: int, xmin: float, xmax: float, ymax: float) -> None:
+def add_bands(fig, row: int, col: int, xmin: float, xmax: float, ymax: float, log_x: bool = False) -> None:
+    def place(value: float) -> float:
+        return float(np.log10(value)) if log_x else value
+
     for x0, x1, label, fill, colour in BANDS:
         if x1 < xmin or x0 > xmax:
             continue
         fig.add_vrect(
-            x0=max(x0, xmin),
-            x1=min(x1, xmax),
+            x0=place(max(x0, xmin)),
+            x1=place(min(x1, xmax)),
             fillcolor=fill,
             line_width=0,
             layer="below",
             row=row,
             col=col,
         )
-        if xmin <= (x0 + x1) / 2 <= xmax:
+        midpoint = (x0 + x1) / 2
+        if xmin <= midpoint <= xmax:
             fig.add_annotation(
-                x=min(max((x0 + x1) / 2, xmin), xmax),
+                x=place(min(max(midpoint, xmin), xmax)),
                 y=ymax * 0.97,
                 text=label,
                 showarrow=False,
@@ -667,14 +671,17 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
                     )
             else:
                 earth = (wavelength >= EARTH_WAVE_MIN) & (wavelength <= EARTH_WAVE_MAX)
+                shown = wavelength[earth]
                 fig.add_trace(
                     go.Scatter(
-                        x=wavelength[earth],
+                        x=np.log10(shown),
                         y=altitude[earth],
                         mode="lines",
                         name=model,
                         legendgroup=model,
                         showlegend=(row == 1),
+                        customdata=shown,
+                        hovertemplate=model + "<br>%{customdata:.3g} µm<br>%{y:.3g} km<extra></extra>",
                         line=dict(color=COLOURS[model], width=2.2),
                     ),
                     row=row,
@@ -687,15 +694,21 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
             fig.update_xaxes(range=[1.5, 12.0], title_text="Wavelength [µm]", row=row, col=2)
             fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
         else:
-            add_bands(fig, row, 1, EARTH_WAVE_MIN, EARTH_WAVE_MAX, ymax)
+            # Linear axis in log10(µm). A Plotly log axis treats the band
+            # rectangles (for example 8–10 µm) as powers of ten.
+            ticks = (0.2, 0.5, 1, 2, 5, 10, 20)
             fig.update_xaxes(
-                type="log",
                 range=[np.log10(EARTH_WAVE_MIN), np.log10(EARTH_WAVE_MAX)],
+                autorange=False,
+                tickmode="array",
+                tickvals=[np.log10(tick) for tick in ticks],
+                ticktext=[f"{tick:g}" for tick in ticks],
                 title_text="Wavelength [µm]",
                 row=row,
                 col=1,
             )
             fig.update_yaxes(range=[0, ymax], title_text="Effective altitude [km]", row=row, col=1)
+            add_bands(fig, row, 1, EARTH_WAVE_MIN, EARTH_WAVE_MAX, ymax, log_x=True)
     title = "Proxima Centauri b transmission spectra" if proxima else "Earth transmission spectra"
     fig.update_layout(
         template="plotly_white",

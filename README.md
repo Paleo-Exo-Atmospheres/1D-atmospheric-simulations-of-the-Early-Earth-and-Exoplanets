@@ -5,9 +5,11 @@
 
 ## Overview
 
-This repository accompanies the paper **"Simulations of the Evolving Ozone Layer: Implications for the Early Earth and Exoplanets"** It contains the simulation data, model configuration files, and analysis scripts used to study how Earth's atmosphere — and in particular its ozone (O₃) layer — responds to changing atmospheric oxygen levels from the **Proterozoic through the Phanerozoic to the present day**.
+This repository accompanies the paper **"Simulations of the Evolving Ozone Layer: Implications for the Early Earth, Exoplanets, and the Search for Life"** It contains the simulation data, model configuration files, and analysis scripts used to study how Earth's atmosphere — and in particular its ozone (O₃) layer — responds to changing atmospheric oxygen levels from the **Proterozoic through the Phanerozoic to the present day**.
 
-The central scientific question is how atmospheric photochemistry and ozone evolve as O₂ is increased from 0.1% the present atmospheric level (PAL) to modern day concentrations. In terms of Earth's history, this roughly corresponds to the early Proterozoic (~2.4 Gyr onward) through the oxygenation events of the Phanerozoic to modern conditions. We simulate this evolution using four independent one-dimensional (1D) photochemical models, compared against **WACCM6**, a 3D chemistry-climate model. WACCM6 is a high-top extension of a configuration of the Community Earth System Model (CESM2) that includes interactive atmospheric chemistry.
+How does atmospheric photochemistry and ozone evolve as O₂ is increased from 0.1% the present atmospheric level (PAL) to modern day concentrations? This is a question that has been investigated for over 5 decades. Models have been run independently, but we wanted to see how models compared when starting from the same boundary conditions.
+
+In terms of Earth's history, the rise in oxygen we are considering roughly corresponds to the early Proterozoic (~2.4 Gyr onward) through the oxygenation events of the Phanerozoic to modern conditions. We simulate this evolution using four independent one-dimensional (1D) photochemical models, compared against **WACCM6**, a 3D chemistry-climate model. WACCM6 is a high-top extension of a configuration of the Community Earth System Model (CESM2) that includes interactive atmospheric chemistry.
 
 We systematically vary:
 
@@ -64,6 +66,7 @@ Solar-age labels such as `Sun_0.0Ga` (present Sun) and `Sun_2.4Ga` (younger Sun)
 ├── Photochem/              # Photochem model output
 ├── VULCAN/                 # VULCAN configuration and input files
 ├── Kasting_1D_model/       # Kasting 1D model output
+├── WACCM6/                 # WACCM6 files
 ├── Python/                 # Analysis and plotting scripts
 ├── PSG/                    # Planetary Spectrum Generator post-processing
 ├── Plots/                  # Interactive explorer
