@@ -251,7 +251,7 @@ def pressure_limits(var_id: str, quantity: str) -> tuple[float, float]:
         return 1e3, 50.0
     if quantity == "density" and var_id in ("O3", "O"):
         return 1e3, 1e-1
-    if var_id in ("NOX", "HOX", "H2O", "OH", "jo2_rate"):
+    if var_id in ("NOX", "HOX", "H2O", "OH", "jo2", "jo2_a", "jo2_b", "jo2_rate"):
         return 1e3, 1e-3
     return 1e3, 1e-4
 
