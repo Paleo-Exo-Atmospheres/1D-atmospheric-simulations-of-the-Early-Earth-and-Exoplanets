@@ -1128,7 +1128,10 @@ def ozone_column_du(pressure_hpa, mixing, o2_mr: float) -> float:
     if ok.sum() < 2:
         return float("nan")
     order = np.argsort(pressure[ok])
-    integral = float(np.trapz(chi[ok][order], pressure[ok][order]))
+    trapezoid = getattr(np, "trapezoid", None)
+    if trapezoid is None:
+        trapezoid = np.trapz
+    integral = float(trapezoid(chi[ok][order], pressure[ok][order]))
     column = abs(integral) / (_mean_molecular_mass(o2_mr) * _GRAVITY)
     return column / _DU_PER_M2
 
