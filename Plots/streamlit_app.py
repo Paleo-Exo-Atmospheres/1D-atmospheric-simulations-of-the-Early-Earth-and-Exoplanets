@@ -195,7 +195,6 @@ def display_meta(var_id: str, quantity: str) -> dict:
 
 
 # Fixed ranges follow the comparison figures in Early_Earth.py.
-# Mixing-ratio axes stay at or above 1e-9, except O and OH.
 MIXING_X = {
     "O3": (1e-9, 1e-4),
     "O": (1e-12, 1e-1),
@@ -203,13 +202,13 @@ MIXING_X = {
     "CH4": (1e-9, 1e-4),
     "N2O": (1e-9, 1e-6),
     "OH": (2e-15, 1e-8),
-    "H2O": (1e-9, 1e-1),
-    "NOX": (1e-12, 1e-7),
-    "HOX": (1e-12, 1e-7),
+    "H2O": (1e-7, 1e-4),
+    "NOX": (1e-13, 1e-7),
+    "HOX": (2e-13, 1e-7),
     "jo2_rate": (1e11, 6e12),
-    "jo2": (1e-12, 1e-2),
-    "jo2_a": (1e-12, 1e-2),
-    "jo2_b": (1e-12, 1e-2),
+    "jo2": (1e-12, 1e-3),
+    "jo2_a": (1e-12, 1e-3),
+    "jo2_b": (1e-12, 1e-3),
     "jo3": (1e-12, 1e-2),
     "jo3_a": (1e-12, 1e-2),
     "jo3_b": (1e-12, 1e-2),
@@ -218,7 +217,7 @@ MIXING_X = {
 }
 DENSITY_X = {
     "O3": (5e16, 6e18),
-    "O": (1e10, 1e18),
+    "O": (1e9, 1e16),
     "O2": (1e16, 1e25),
     "CH4": (1e12, 1e21),
     "N2O": (1e12, 1e20),
@@ -228,8 +227,8 @@ DENSITY_X = {
     "HOX": (1e10, 1e17),
 }
 LINEAR_X = {
-    "T": (150.0, 310.0),
-    "U": (-50.0, 50.0),
+    "T": (145.0, 300.0),
+    "U": (-60.0, 60.0),
     "V": (-10.0, 10.0),
 }
 ZONAL_FIELDS = ("U", "V", "CLDLIQ", "CLDICE")
@@ -244,10 +243,16 @@ def x_limits(var_id: str, quantity: str) -> tuple[float, float] | None:
 
 
 def pressure_limits(var_id: str, quantity: str) -> tuple[float, float]:
-    """Surface pressure first, top-of-plot pressure second. Both in hPa."""
-    del quantity
+    """Surface pressure first, top-of-plot pressure second. Both in hPa.
+
+    Windows follow the comparison figures in Early_Earth.py.
+    """
     if var_id in ("CLDLIQ", "CLDICE"):
         return 1e3, 50.0
+    if quantity == "density" and var_id in ("O3", "O"):
+        return 1e3, 1e-1
+    if var_id in ("NOX", "HOX", "H2O", "OH", "jo2_rate"):
+        return 1e3, 1e-3
     return 1e3, 1e-4
 
 
@@ -1137,13 +1142,25 @@ def family_caption(var_id: str, quantity: str = "mixing") -> str:
             "computed on the saved atmosphere."
         )
     if quantity == "mixing" and var_id in data.CHEMICAL_IDS:
-        if var_id in ("O", "OH"):
+        if var_id == "OH":
+            parts.append("The axis runs from 2×10⁻¹⁵ to 10⁻⁸, and pressure from 1000 to 0.001 hPa.")
+        elif var_id == "NOX":
+            parts.append("The axis runs from 10⁻¹³ to 10⁻⁷, and pressure from 1000 to 0.001 hPa.")
+        elif var_id == "HOX":
+            parts.append("The axis runs from 2×10⁻¹³ to 10⁻⁷, and pressure from 1000 to 0.001 hPa.")
+        elif var_id == "H2O":
+            parts.append("The axis runs from 10⁻⁷ to 10⁻⁴, and pressure from 1000 to 0.001 hPa.")
+        elif var_id == "O":
             parts.append("This axis extends below 10⁻⁹.")
-        elif var_id in ("NOX", "HOX"):
-            parts.append("This axis extends down to 10⁻¹².")
+        elif var_id == "O3":
+            parts.append("The axis runs from 10⁻⁹ to 10⁻⁴.")
         else:
             parts.append("The mixing-ratio axis does not go below 10⁻⁹.")
-    if quantity == "density" and var_id in data.CHEMICAL_IDS:
+    if quantity == "density" and var_id == "O3":
+        parts.append("The axis runs from 5×10¹⁶ to 6×10¹⁸ molecules m⁻³, from 1000 to 0.1 hPa.")
+    elif quantity == "density" and var_id == "O":
+        parts.append("The axis runs from 10⁹ to 10¹⁶ molecules m⁻³, from 1000 to 0.1 hPa.")
+    elif quantity == "density" and var_id in data.CHEMICAL_IDS:
         parts.append("Number density is in molecules m⁻³.")
     return " ".join(parts)
 
