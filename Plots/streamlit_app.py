@@ -741,15 +741,30 @@ def add_column_band(
                         y=np.concatenate([lo, hi[::-1]]),
                         fill="toself",
                         fillcolor=fill_rgba(colour, alpha),
-                        line=dict(width=0),
+                        line=dict(width=0, color=colour),
                         name=name,
                         legendgroup=name,
-                        showlegend=show_legend and not legend_drawn,
+                        showlegend=False,
                         hoverinfo="skip",
                     ),
                     row=row,
                     col=col,
                 )
+                if show_legend and not legend_drawn:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=[None],
+                            y=[None],
+                            mode="lines",
+                            line=dict(color=colour, width=12),
+                            name=name,
+                            legendgroup=name,
+                            showlegend=True,
+                            hoverinfo="skip",
+                        ),
+                        row=row,
+                        col=col,
+                    )
                 legend_drawn = True
             start = None
 
@@ -785,69 +800,108 @@ def add_column_line(
 
 
 def figure_ozone_column(curve: dict) -> go.Figure:
-    """Paper O2–O3 figure: one overview and a panel for each 1D model."""
+    """Paper O2–O3 figure: overview on top, then one panel for each 1D model."""
+    # Same colours as the paper panels. VULCAN stays the two networks.
+    ozone_colours = {
+        "WACCM6": "#000000",
+        "Total 1D model range": "#00bcd4",
+        "Kasting 1D range": "#008080",
+        "Photochem range": "#0000ff",
+        "Atmos range": "#ff8c00",
+        "VULCAN NCHO": "#6b21a8",
+        "VULCAN SNCHOAr": "#f9a8d4",
+    }
     fig = make_subplots(
         rows=3,
         cols=2,
         specs=[[{"colspan": 2}, None], [{}, {}], [{}, {}]],
-        subplot_titles=(
-            "O₂–O₃ curve between 1D models and WACCM6",
-            "",
-            "Kasting",
-            "Photochem",
-            "Atmos",
-            "VULCAN",
-        ),
-        vertical_spacing=0.09,
-        horizontal_spacing=0.08,
+        subplot_titles=("", "", "Kasting", "Photochem", "Atmos", "VULCAN"),
+        vertical_spacing=0.12,
+        horizontal_spacing=0.07,
     )
     x = curve["x"]
-    panels = {
-        (1, 1): "overview",
-        (2, 1): "Kasting",
-        (2, 2): "Photochem",
-        (3, 1): "Atmos",
-        (3, 2): "VULCAN",
-    }
-    for (row, col), kind in panels.items():
+    panels = (
+        (1, 1, "overview"),
+        (2, 1, "Kasting 1D range"),
+        (2, 2, "Photochem range"),
+        (3, 1, "Atmos range"),
+        (3, 2, "VULCAN"),
+    )
+    x_title = "Oxygen mixing ratio [PAL]"
+    y_title = "O₃ column [DU]"
+    for row, col, kind in panels:
         add_column_band(
             fig, x, curve["waccm_min"], curve["waccm_max"],
-            "WACCM6 range", "#111111", 0.18, row, col, show_legend=(row == 1),
+            "WACCM6 (Cooke et al. 2022)", ozone_colours["WACCM6"], 0.18,
+            row, col, show_legend=(row == 1 and col == 1),
         )
         add_column_line(
             fig, x, curve["waccm_mean"],
-            "WACCM6", "#111111", row, col, show_legend=(row == 1),
+            "WACCM6 (Cooke et al. 2022)", ozone_colours["WACCM6"],
+            row, col, show_legend=False,
         )
         if kind == "overview":
             add_column_band(
                 fig, x, curve["envelope_low"], curve["envelope_high"],
-                "Total 1D model range", "#22d3ee", 0.35, row, col, show_legend=True,
+                "Total 1D model range", ozone_colours["Total 1D model range"], 0.4,
+                row, col, show_legend=True,
             )
         elif kind == "VULCAN":
             for name, alpha in (("VULCAN NCHO", 0.45), ("VULCAN SNCHOAr", 0.75)):
                 band = curve["bands"][name]
                 add_column_band(
                     fig, x, band["low"], band["high"],
-                    name, COLOURS[name], alpha, row, col, show_legend=True,
+                    name, ozone_colours[name], alpha, row, col, show_legend=True,
                 )
         else:
-            band = curve["bands"][kind]
+            model = kind.split()[0]
+            band = curve["bands"][model]
             add_column_band(
                 fig, x, band["low"], band["high"],
-                kind, COLOURS[kind], 0.35, row, col, show_legend=True,
+                kind, ozone_colours[kind], 0.4, row, col, show_legend=True,
             )
-        fig.update_xaxes(type="log", range=[np.log10(1e-3), np.log10(1.5)], row=row, col=col)
+        fig.update_xaxes(
+            type="log",
+            range=[np.log10(1.0e-3), np.log10(1.5)],
+            tickvals=[0.001, 0.01, 0.1, 1],
+            ticktext=["10⁻³", "10⁻²", "10⁻¹", "1"],
+            row=row,
+            col=col,
+        )
         fig.update_yaxes(range=[0, 380], row=row, col=col)
-    fig.update_xaxes(title_text="Oxygen [PAL]", row=3, col=1)
-    fig.update_xaxes(title_text="Oxygen [PAL]", row=3, col=2)
-    fig.update_yaxes(title_text="O₃ column [DU]", row=1, col=1)
-    fig.update_yaxes(title_text="O₃ column [DU]", row=2, col=1)
-    fig.update_yaxes(title_text="O₃ column [DU]", row=3, col=1)
+    fig.update_xaxes(title_text=x_title, row=1, col=1)
+    fig.update_xaxes(title_text=x_title, row=3, col=1)
+    fig.update_xaxes(title_text=x_title, row=3, col=2)
+    fig.update_yaxes(title_text=y_title, row=1, col=1)
+    fig.update_yaxes(title_text=y_title, row=3, col=1)
+    fig.update_yaxes(showticklabels=False, row=2, col=2)
+    fig.update_yaxes(showticklabels=False, row=3, col=2)
+    for annotation in fig.layout.annotations:
+        if annotation.text:
+            annotation.font = dict(size=16, color="black")
     fig.update_layout(
         template="plotly_white",
-        height=980,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-        margin=dict(l=64, r=28, t=80, b=48),
+        height=1120,
+        title=dict(
+            text="O₂–O₃ curve between 1D models and WACCM6",
+            x=0.5,
+            xanchor="center",
+            y=0.98,
+            yanchor="top",
+            font=dict(size=18, color="black"),
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.12,
+            x=0.5,
+            xanchor="center",
+            font=dict(size=14, color="black"),
+            bgcolor="white",
+            itemsizing="constant",
+            tracegroupgap=18,
+        ),
+        margin=dict(l=78, r=36, t=210, b=56),
     )
     white_figure(fig)
     return fig
@@ -918,8 +972,8 @@ def main() -> None:
                 format_func=planet_name,
             )
         st.caption(
-            "WACCM6 curves use the compressed subsets in Plots/waccm. "
-            "150% PAL is not in that set."
+            "WACCM6 curves use the zonal-mean files in WACCM6. "
+            "10% to 0.1% PAL use the corrected upper-boundary runs."
         )
 
     if not pals:
@@ -933,10 +987,12 @@ def main() -> None:
         st.caption(
             "Ozone column against oxygen, as in the paper figure. "
             "The black line is the WACCM6 Gaussian-weighted mean and the grey band is "
-            "the minimum to maximum over latitude and longitude. "
+            "the minimum to maximum of the zonal mean over latitude. "
             "Kasting, Photochem, and Atmos are shaded from 45° to 60°. "
             "VULCAN NCHO is the darker purple band from 48.2° to 60°, and "
             "VULCAN SNCHOAr is the lighter pink band from 45° to 60°. "
+            "The 50% PAL SNCHOAr run at 60° is omitted: its temperature stays "
+            "at 287 K through the stratosphere, so it is not a WACCM-temperature case. "
             "Seasonal wind and circulation figures are not included."
         )
     elif style == STYLE_SPECTRUM:
@@ -999,12 +1055,11 @@ def main() -> None:
             `.vul` files in `~/VULCAN/output` are used when a condensed file
             is not there yet.
 
-            WACCM6 profiles come from the compressed files in `Plots/waccm`
-            (0.1% to 100% PAL, plus 0.5%, 5%, and 50%). Each file still has
-            longitude, and the app averages it. The black line is the
+            WACCM6 profiles come from the zonal-mean files in `WACCM6/`
+            (0.1% to 150% PAL). Longitude is already averaged. The black line is the
             Gaussian-weighted global mean. The shaded band is the minimum to
-            maximum of that zonal mean. Latitude–pressure maps use the same
-            zonal mean. 150% PAL was not included in the GitHub subset.
+            maximum of that zonal mean across latitude. Latitude–pressure maps use the same
+            files. 10% to 0.1% PAL are the corrected upper-boundary runs.
 
             NOₓ is N + NO + NO₂. HOₓ is H + OH + HO₂ + 2 H₂O₂. Those are the
             WACCM6 family definitions. Photolysis curves are frequencies J in

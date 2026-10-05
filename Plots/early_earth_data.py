@@ -2,7 +2,7 @@
 
 The Streamlit app imports this module. Paths are relative to the
 1D-Simulations-of-the-Early-Earth repository. WACCM6 fields are the compressed
-subsets in ``Plots/waccm``. VULCAN ``.vul`` files are read from this repository
+subsets in ``WACCM6``. VULCAN ``.vul`` files are read from this repository
 or from ``~/VULCAN/output``.
 """
 
@@ -19,6 +19,7 @@ import pandas as pd
 PLOTS_DIR = Path(__file__).resolve().parent
 REPO_DIR = PLOTS_DIR.parent
 SPECTRA_DIR = PLOTS_DIR / "spectra"
+WACCM_DIR = REPO_DIR / "WACCM6"
 WACCM_SUBSET_DIR = PLOTS_DIR / "waccm"
 
 PAL_ORDER = ["150", "100", "50", "10", "5", "1", "0.5", "0.1"]
@@ -204,11 +205,11 @@ PREFERRED_WACCM = {
     "150": "Earth_150pc_o2.cam.h0.0034-0037.nc",
     "100": "Earth_100pc_o2.cam.h0.0009-0012.nc",
     "50": "Earth_50pc_o2.cam.h0.0040-0043.nc",
-    "10": "Earth_10pc_o2.cam.h0.0037-0040.nc",
-    "5": "Earth_5pc_o2.cam.h0.0048-0051.nc",
-    "1": "Earth_1pc_o2.cam.h0.0045-0048.nc",
-    "0.5": "Earth_0.5pc_o2.cam.h0.0055-0058.nc",
-    "0.1": "Earth_0.1pc_o2.cam.h0.0033-0036.nc",
+    "10": "Earth_10pc_o2_ubc.cam.h0.0036.nc",
+    "5": "Earth_5pc_o2_ubc.cam.h0.0047.nc",
+    "1": "Earth_1pc_o2_ubc.cam.h0.0044.nc",
+    "0.5": "Earth_0.5pc_o2_ubc.cam.h0.0056.nc",
+    "0.1": "Earth_0.1pc_o2_ubc.cam.h0.0045.nc",
 }
 
 WACCM_TOKEN = {pal: f"Earth_{pal}pc_o2" for pal in PAL_ORDER}
@@ -830,6 +831,7 @@ def _waccm_dirs() -> list[Path]:
     env = os.environ.get("WACCM_DIR")
     if env:
         candidates.append(Path(env))
+    candidates.append(WACCM_DIR)
     candidates.append(WACCM_SUBSET_DIR)
     found = []
     for path in candidates:
@@ -840,14 +842,17 @@ def _waccm_dirs() -> list[Path]:
 
 def find_waccm_file(pal: str) -> Path | None:
     token = WACCM_TOKEN[pal]
-    preferred_names = {
-        PREFERRED_WACCM[pal],
-        PREFERRED_WACCM[pal].replace(".nc", "_subset.nc"),
-    }
+    source_name = PREFERRED_WACCM[pal]
+    # Zonal-mean chemistry is what the app plots. Prefer it over a full-longitude subset.
+    preferred_names = [
+        source_name.replace(".nc", "_subset_zonal.nc"),
+        source_name,
+        source_name.replace(".nc", "_subset.nc"),
+    ]
     skip = ("_dyn", "_YS", "NPZD", "scat", "Monthly")
     for folder in _waccm_dirs():
         hits = []
-        for path in folder.glob("*.nc"):
+        for path in folder.rglob("*.nc"):
             name = path.name
             if any(token_skip in name for token_skip in skip):
                 continue
@@ -856,9 +861,10 @@ def find_waccm_file(pal: str) -> Path | None:
             hits.append(path)
         if not hits:
             continue
-        for path in hits:
-            if path.name in preferred_names:
-                return path
+        for wanted in preferred_names:
+            for path in hits:
+                if path.name == wanted:
+                    return path
         subsets = [path for path in hits if "subset" in path.name]
         pool = subsets or [path for path in hits if re.search(r"h0\.\d+-\d+", path.name)] or hits
         return sorted(pool, key=lambda item: item.name)[-1]
@@ -1188,8 +1194,33 @@ def waccm_ozone_column(pal: str) -> tuple[float, float, float]:
     return mean, float(np.nanmin(finite)), float(np.nanmax(finite))
 
 
+def vulcan_temperature_is_waccm(path: Path) -> bool:
+    """True when the saved temperature is a WACCM profile, not a surface isotherm.
+
+    One SNCHOAr file is 287 K from the surface to about 0.001 hPa. That run
+    has no cold trap, so water and HOx stay high and the ozone column collapses.
+    """
+    if path.suffix != ".npz" or not path.is_file():
+        return True
+    with np.load(path, allow_pickle=False) as archive:
+        if "Tco" not in archive.files or "pco" not in archive.files:
+            return True
+        temperature = np.asarray(archive["Tco"], dtype=float)
+        pressure_hpa = np.asarray(archive["pco"], dtype=float) / 1.0e3
+    stratosphere = (pressure_hpa < 100.0) & (pressure_hpa > 1.0) & np.isfinite(temperature)
+    if int(stratosphere.sum()) < 3:
+        return True
+    profile = temperature[stratosphere]
+    return float(np.median(profile)) < 270.0 and float(np.std(profile)) > 1.0
+
+
 def model_ozone_column(model: str, pal: str, sza: str) -> float:
     """1D ozone column at one oxygen level and solar zenith angle."""
+    if model.startswith("VULCAN"):
+        network = "SNCHOAr" if "SNCHO" in model else "NCHO"
+        path = find_vulcan_file(pal, sza, network)
+        if path is not None and not vulcan_temperature_is_waccm(path):
+            return float("nan")
     profile = load_profile(model, pal, sza, "O3")
     if profile is None:
         return float("nan")
@@ -1199,6 +1230,11 @@ def model_ozone_column(model: str, pal: str, sza: str) -> float:
 def _column_band(model: str, pal: str, angles: tuple[str, str]) -> tuple[float, float]:
     values = [model_ozone_column(model, pal, angle) for angle in angles]
     finite = [value for value in values if np.isfinite(value)]
+    # If a 60° SNCHOAr file is unusable, 48.2° is the other saved WACCM-temperature run.
+    if model == "VULCAN SNCHOAr" and len(finite) < 2:
+        extra = model_ozone_column(model, pal, "48.2")
+        if np.isfinite(extra):
+            finite.append(extra)
     if not finite:
         return float("nan"), float("nan")
     return float(min(finite)), float(max(finite))
@@ -1235,6 +1271,16 @@ def ozone_oxygen_curve() -> dict:
             notes.append(f"WACCM6 has no {pal_label(pal)} ozone column.")
         edges = []
         for name, angles in bands.items():
+            if name.startswith("VULCAN"):
+                network = "SNCHOAr" if "SNCHO" in name else "NCHO"
+                for angle in angles:
+                    path = find_vulcan_file(pal, angle, network)
+                    if path is not None and not vulcan_temperature_is_waccm(path):
+                        notes.append(
+                            f"{name} {pal_label(pal)} at {angle}° is left out of the curve. "
+                            "The temperature is 287 K from the surface through the stratosphere, "
+                            "so this file did not use the WACCM temperature profile."
+                        )
             band_low, band_high = _column_band(name, pal, angles)
             stored[name]["low"].append(band_low)
             stored[name]["high"].append(band_high)
