@@ -27,7 +27,9 @@ COLOURS = {
     "WACCM6": "#111111",
     "Atmos": "#ea580c",
     "Photochem": "#1d4ed8",
-    "VULCAN": "#c026d3",
+    "VULCAN": "#6b21a8",
+    "VULCAN NCHO": "#6b21a8",
+    "VULCAN SNCHOAr": "#f9a8d4",
     "Kasting": "#0f766e",
 }
 
@@ -43,6 +45,7 @@ PAL_COLOURS = {
 }
 
 STYLE_COMPARE = "Compare models"
+STYLE_OZONE = "Ozone column vs oxygen"
 STYLE_MAP = "WACCM latitude–pressure"
 STYLE_SPECTRUM = "Transmission spectra"
 EARTH_WAVE_MIN = 0.2
@@ -151,6 +154,11 @@ def cached_profile(model: str, pal: str, sza: str, var_id: str, _stamp: str) -> 
         if packed.get(key) is not None:
             packed[key] = np.asarray(packed[key])
     return packed
+
+
+@st.cache_data(show_spinner="Calculating ozone columns…")
+def cached_ozone_curve() -> dict:
+    return data.ozone_oxygen_curve()
 
 
 def presented_profile(profile: dict | None, quantity: str) -> dict | None:
@@ -692,6 +700,159 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
     return fig, notes
 
 
+def fill_rgba(hex_colour: str, alpha: float) -> str:
+    colour = hex_colour.lstrip("#")
+    red = int(colour[0:2], 16)
+    green = int(colour[2:4], 16)
+    blue = int(colour[4:6], 16)
+    return f"rgba({red}, {green}, {blue}, {alpha})"
+
+
+def add_column_band(
+    fig: go.Figure,
+    x,
+    low,
+    high,
+    name: str,
+    colour: str,
+    alpha: float,
+    row: int,
+    col: int,
+    show_legend: bool,
+) -> None:
+    """Shade a column range, breaking the shade where a point is missing."""
+    x = np.asarray(x, dtype=float)
+    low = np.asarray(low, dtype=float)
+    high = np.asarray(high, dtype=float)
+    mask = np.isfinite(x) & np.isfinite(low) & np.isfinite(high) & (x > 0)
+    legend_drawn = False
+    start = None
+    for index, ok in enumerate(list(mask) + [False]):
+        if ok and start is None:
+            start = index
+        elif not ok and start is not None:
+            if index - start >= 2:
+                xs = x[start:index]
+                lo = low[start:index]
+                hi = high[start:index]
+                fig.add_trace(
+                    go.Scatter(
+                        x=np.concatenate([xs, xs[::-1]]),
+                        y=np.concatenate([lo, hi[::-1]]),
+                        fill="toself",
+                        fillcolor=fill_rgba(colour, alpha),
+                        line=dict(width=0),
+                        name=name,
+                        legendgroup=name,
+                        showlegend=show_legend and not legend_drawn,
+                        hoverinfo="skip",
+                    ),
+                    row=row,
+                    col=col,
+                )
+                legend_drawn = True
+            start = None
+
+
+def add_column_line(
+    fig: go.Figure,
+    x,
+    y,
+    name: str,
+    colour: str,
+    row: int,
+    col: int,
+    show_legend: bool,
+) -> None:
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    mask = np.isfinite(x) & np.isfinite(y) & (x > 0)
+    if mask.sum() < 2:
+        return
+    fig.add_trace(
+        go.Scatter(
+            x=x[mask],
+            y=y[mask],
+            mode="lines",
+            name=name,
+            legendgroup=name,
+            showlegend=show_legend,
+            line=dict(color=colour, width=2.2),
+        ),
+        row=row,
+        col=col,
+    )
+
+
+def figure_ozone_column(curve: dict) -> go.Figure:
+    """Paper O2–O3 figure: one overview and a panel for each 1D model."""
+    fig = make_subplots(
+        rows=3,
+        cols=2,
+        specs=[[{"colspan": 2}, None], [{}, {}], [{}, {}]],
+        subplot_titles=(
+            "O₂–O₃ curve between 1D models and WACCM6",
+            "",
+            "Kasting",
+            "Photochem",
+            "Atmos",
+            "VULCAN",
+        ),
+        vertical_spacing=0.09,
+        horizontal_spacing=0.08,
+    )
+    x = curve["x"]
+    panels = {
+        (1, 1): "overview",
+        (2, 1): "Kasting",
+        (2, 2): "Photochem",
+        (3, 1): "Atmos",
+        (3, 2): "VULCAN",
+    }
+    for (row, col), kind in panels.items():
+        add_column_band(
+            fig, x, curve["waccm_min"], curve["waccm_max"],
+            "WACCM6 range", "#111111", 0.18, row, col, show_legend=(row == 1),
+        )
+        add_column_line(
+            fig, x, curve["waccm_mean"],
+            "WACCM6", "#111111", row, col, show_legend=(row == 1),
+        )
+        if kind == "overview":
+            add_column_band(
+                fig, x, curve["envelope_low"], curve["envelope_high"],
+                "Total 1D model range", "#22d3ee", 0.35, row, col, show_legend=True,
+            )
+        elif kind == "VULCAN":
+            for name, alpha in (("VULCAN NCHO", 0.45), ("VULCAN SNCHOAr", 0.75)):
+                band = curve["bands"][name]
+                add_column_band(
+                    fig, x, band["low"], band["high"],
+                    name, COLOURS[name], alpha, row, col, show_legend=True,
+                )
+        else:
+            band = curve["bands"][kind]
+            add_column_band(
+                fig, x, band["low"], band["high"],
+                kind, COLOURS[kind], 0.35, row, col, show_legend=True,
+            )
+        fig.update_xaxes(type="log", range=[np.log10(1e-3), np.log10(1.5)], row=row, col=col)
+        fig.update_yaxes(range=[0, 380], row=row, col=col)
+    fig.update_xaxes(title_text="Oxygen [PAL]", row=3, col=1)
+    fig.update_xaxes(title_text="Oxygen [PAL]", row=3, col=2)
+    fig.update_yaxes(title_text="O₃ column [DU]", row=1, col=1)
+    fig.update_yaxes(title_text="O₃ column [DU]", row=2, col=1)
+    fig.update_yaxes(title_text="O₃ column [DU]", row=3, col=1)
+    fig.update_layout(
+        template="plotly_white",
+        height=980,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        margin=dict(l=64, r=28, t=80, b=48),
+    )
+    white_figure(fig)
+    return fig
+
+
 def planet_name(planet: str) -> str:
     if planet == "proxima":
         return "Proxima Centauri b"
@@ -711,42 +872,46 @@ def main() -> None:
         st.header("Explorer")
         style = st.selectbox(
             "Plot style",
-            [STYLE_COMPARE, STYLE_MAP, STYLE_SPECTRUM],
+            [STYLE_COMPARE, STYLE_OZONE, STYLE_MAP, STYLE_SPECTRUM],
         )
         variable_labels = {key: data.VARIABLES[key]["label"] for key in data.VARIABLES}
-        var_id = st.selectbox(
-            "Variable",
-            list(variable_labels),
-            format_func=lambda key: variable_labels[key],
-            index=0,
-        )
-        pal_options = data.PAL_ORDER
-        pals = st.multiselect(
-            "Oxygen",
-            pal_options,
-            default=data.STANDARD_PALS,
-            format_func=data.pal_label,
-        )
+        if style == STYLE_OZONE:
+            var_id = "O3"
+            pals = list(data.CURVE_PALS)
+        else:
+            var_id = st.selectbox(
+                "Variable",
+                list(variable_labels),
+                format_func=lambda key: variable_labels[key],
+                index=0,
+            )
+            pals = st.multiselect(
+                "Oxygen",
+                data.PAL_ORDER,
+                default=data.STANDARD_PALS,
+                format_func=data.pal_label,
+            )
         meta = data.VARIABLES[var_id]
         sza = "48.2"
-        models = list(data.MODEL_ORDER)
+        models = list(data.PROFILE_MODELS)
         show_spread = False
         planet = "proxima"
         quantity = "mixing"
-        if var_id in data.CHEMICAL_IDS and style != STYLE_SPECTRUM:
+        if var_id in data.CHEMICAL_IDS and style in (STYLE_COMPARE, STYLE_MAP):
             quantity = st.radio(
                 "Quantity",
                 ["mixing", "density"],
                 format_func=lambda key: "Mixing ratio" if key == "mixing" else "Number density",
                 horizontal=True,
             )
-        if style != STYLE_SPECTRUM:
-            if meta["compare"] and style == STYLE_COMPARE:
+        if style == STYLE_COMPARE:
+            if meta["compare"]:
                 sza = st.selectbox("1D solar zenith angle", data.SZA_CHOICES, index=0)
-                models = st.multiselect("Models", data.MODEL_ORDER, default=data.MODEL_ORDER)
-            if style == STYLE_COMPARE:
-                show_spread = st.checkbox("WACCM6 range across latitude", value=True)
-        else:
+                models = st.multiselect(
+                    "Models", data.PROFILE_MODELS, default=data.PROFILE_MODELS
+                )
+            show_spread = st.checkbox("WACCM6 range across latitude", value=True)
+        elif style == STYLE_SPECTRUM:
             planet = st.radio(
                 "Planet",
                 ["proxima", "earth"],
@@ -761,7 +926,20 @@ def main() -> None:
         st.info("Choose at least one oxygen level.")
         return
 
-    if style == STYLE_SPECTRUM:
+    if style == STYLE_OZONE:
+        curve = cached_ozone_curve()
+        figure = figure_ozone_column(curve)
+        notes = curve["notes"]
+        st.caption(
+            "Ozone column against oxygen, as in the paper figure. "
+            "The black line is the WACCM6 Gaussian-weighted mean and the grey band is "
+            "the minimum to maximum over latitude and longitude. "
+            "Kasting, Photochem, and Atmos are shaded from 45° to 60°. "
+            "VULCAN NCHO is the darker purple band from 48.2° to 60°, and "
+            "VULCAN SNCHOAr is the lighter pink band from 45° to 60°. "
+            "Seasonal wind and circulation figures are not included."
+        )
+    elif style == STYLE_SPECTRUM:
         figure, notes = figure_spectra(planet, pals)
         if planet == "earth":
             st.caption(
@@ -812,9 +990,14 @@ def main() -> None:
         st.markdown(
             """
             1D profiles are the present-Sun, WACCM6 temperature-profile experiments
-            in `Atmos/`, `Photochem/`, and `Kasting_1D_model/`. VULCAN `.vul` files
-            are read from `VULCAN/output` in this repository or from
-            `~/VULCAN/output`.
+            in `Atmos/`, `Photochem/`, and `Kasting_1D_model/`. VULCAN Earth
+            profiles are the lower-boundary, WACCM temperature-profile runs.
+            NCHO is the darker purple curve and SNCHOAr is the lighter pink
+            curve. The app reads the condensed chemistry in `VULCAN/output`
+            (`*.npz`: every species, both mixing ratio and number density,
+            temperature, pressure, and every photolysis frequency). Full
+            `.vul` files in `~/VULCAN/output` are used when a condensed file
+            is not there yet.
 
             WACCM6 profiles come from the compressed files in `Plots/waccm`
             (0.1% to 100% PAL, plus 0.5%, 5%, and 50%). Each file still has

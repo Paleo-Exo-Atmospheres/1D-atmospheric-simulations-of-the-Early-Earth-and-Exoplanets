@@ -27,6 +27,14 @@ EXTRA_PALS = ["150", "50", "5", "0.5"]
 SZA_CHOICES = ["48.2", "45", "60"]
 
 MODEL_ORDER = ["WACCM6", "Atmos", "Photochem", "VULCAN", "Kasting"]
+PROFILE_MODELS = [
+    "WACCM6",
+    "Atmos",
+    "Photochem",
+    "VULCAN NCHO",
+    "VULCAN SNCHOAr",
+    "Kasting",
+]
 
 # WACCM6 family definitions, used for every model so the curves are the same quantity.
 # NOX long_name: "nox (N+NO+NO2)"
@@ -578,14 +586,18 @@ def _sza_in_name(name: str, sza: str) -> bool:
     return bool(re.search(rf"(?<![\d.]){re.escape(sza)}SZA", name))
 
 
-def find_vulcan_file(pal: str, sza: str) -> Path | None:
-    patterns = [
-        f"Earth_{pal}pcPAL_o2_{sza}SZA*.vul",
-        f"Earth_{pal}pc_o2_1e12s_{sza}SZA*.vul",
-        f"Earth_{pal}pc_o2_*{sza}SZA*.vul",
-    ]
-    if pal == "100":
-        patterns.append(f"Earth_1e12s_{sza}SZA*.vul")
+def find_vulcan_file(pal: str, sza: str, network: str = "NCHO") -> Path | None:
+    patterns = []
+    for suffix in (".npz", ".vul"):
+        patterns.extend(
+            [
+                f"Earth_{pal}pcPAL_o2_{sza}SZA*{suffix}",
+                f"Earth_{pal}pc_o2_1e12s_{sza}SZA*{suffix}",
+                f"Earth_{pal}pc_o2_*{sza}SZA*{suffix}",
+            ]
+        )
+        if pal == "100":
+            patterns.append(f"Earth_1e12s_{sza}SZA*{suffix}")
     skip = ("CH4", "hum", "Temp", "Kasting", "high_g", "O3", "C24")
     matches = []
     for folder in _vulcan_dirs():
@@ -603,23 +615,59 @@ def find_vulcan_file(pal: str, sza: str) -> Path | None:
         return None
     pal_named = [path for path in kept if "PAL" in path.name]
     pool = pal_named or kept
-    return sorted(pool, key=lambda path: path.name)[0]
-
-
-def load_vulcan(pal: str, sza: str, var_id: str) -> dict | None:
-    path = find_vulcan_file(pal, sza)
-    if path is None:
+    token = "SNCHOAr_LBC_WPT" if network == "SNCHOAr" else "_NCHO_LBC_WPT"
+    network_files = [path for path in pool if token in path.name]
+    if not network_files:
         return None
+    condensed = [path for path in network_files if path.suffix == ".npz"]
+    chosen = condensed or network_files
+    return sorted(chosen, key=lambda path: path.name)[0]
+
+
+def _read_vulcan_chemical(path: Path) -> dict:
+    """Final chemistry from a condensed npz or a full .vul pickle."""
+    if path.suffix == ".npz":
+        with np.load(path, allow_pickle=False) as archive:
+            species = [str(name) for name in archive["species"]]
+            j_table = {
+                (str(name), int(branch)): np.asarray(rate, dtype=float)
+                for name, branch, rate in zip(
+                    archive["j_species"], archive["j_branch"], archive["j_rate"]
+                )
+            }
+            return {
+                "species": species,
+                "ymix": np.asarray(archive["ymix"], dtype=float),
+                "y": np.asarray(archive["y"], dtype=float),
+                "pco": np.asarray(archive["pco"], dtype=float),
+                "Tco": np.asarray(archive["Tco"], dtype=float),
+                "J_sp": j_table,
+            }
     with path.open("rb") as handle:
         dataset = pickle.load(handle)
     variable = dataset["variable"]
-    atm = dataset["atm"]
-    species = list(variable["species"])
-    mixing = np.asarray(variable["ymix"], dtype=float)
-    pressure_hpa = np.asarray(atm["pco"], dtype=float) / 1.0e3
+    atmosphere = dataset["atm"]
+    return {
+        "species": list(variable["species"]),
+        "ymix": np.asarray(variable["ymix"], dtype=float),
+        "y": np.asarray(variable["y"], dtype=float),
+        "pco": np.asarray(atmosphere["pco"], dtype=float),
+        "Tco": np.asarray(atmosphere["Tco"], dtype=float),
+        "J_sp": variable["J_sp"],
+    }
+
+
+def load_vulcan(pal: str, sza: str, var_id: str, network: str = "NCHO") -> dict | None:
+    path = find_vulcan_file(pal, sza, network)
+    if path is None:
+        return None
+    chemical = _read_vulcan_chemical(path)
+    species = chemical["species"]
+    mixing = chemical["ymix"]
+    pressure_hpa = chemical["pco"] / 1.0e3
     kind = VARIABLES[var_id]["kind"]
     if kind == "j":
-        j_table = variable["J_sp"]
+        j_table = chemical["J_sp"]
         if var_id.startswith("jo2"):
             # Branch 0 is the sum of the later branches.
             branch_b = np.asarray(j_table[("O2", 1)], dtype=float)
@@ -630,7 +678,7 @@ def load_vulcan(pal: str, sza: str, var_id: str) -> dict | None:
             branch_a = np.asarray(j_table[("O3", 2)], dtype=float)
             value = _select_j(var_id, branch_a, branch_b, oxidant="o3")
     elif kind == "temperature":
-        value = np.asarray(atm["Tco"], dtype=float)
+        value = chemical["Tco"]
     elif kind == "nox":
         value = _sum_mixing(mixing, species, NOX_SPECIES, h2o2_weight=1.0)
     elif kind == "hox":
@@ -639,10 +687,19 @@ def load_vulcan(pal: str, sza: str, var_id: str) -> dict | None:
         value = _mixing(mixing, species, var_id)
     if value is None:
         return None
-    air = _vulcan_air_m3(variable, species)
-    if air is None and "Tco" in atm:
-        air = _air_from_pressure(pressure_hpa, np.asarray(atm["Tco"], dtype=float))
-    return _finish_1d("VULCAN", pal, sza, pressure_hpa, value, str(path), air)
+    air = _vulcan_air_m3(chemical, species)
+    if air is None:
+        air = _air_from_pressure(pressure_hpa, chemical["Tco"])
+    label = "VULCAN SNCHOAr" if network == "SNCHOAr" else "VULCAN NCHO"
+    return _finish_1d(label, pal, sza, pressure_hpa, value, str(path), air)
+
+
+def load_vulcan_ncho(pal: str, sza: str, var_id: str) -> dict | None:
+    return load_vulcan(pal, sza, var_id, network="NCHO")
+
+
+def load_vulcan_sncho(pal: str, sza: str, var_id: str) -> dict | None:
+    return load_vulcan(pal, sza, var_id, network="SNCHOAr")
 
 
 def _mixing(mixing: np.ndarray, species: list[str], name: str) -> np.ndarray | None:
@@ -932,7 +989,9 @@ _LOADERS = {
     "WACCM6": load_waccm,
     "Atmos": load_atmos,
     "Photochem": load_photochem,
-    "VULCAN": load_vulcan,
+    "VULCAN": load_vulcan_ncho,
+    "VULCAN NCHO": load_vulcan_ncho,
+    "VULCAN SNCHOAr": load_vulcan_sncho,
     "Kasting": load_kasting,
 }
 
@@ -1026,14 +1085,179 @@ def source_stamp(model: str, pal: str, sza: str, var_id: str) -> str:
                 )
     elif model == "Photochem":
         path = REPO_DIR / "Photochem" / f"{pal}pc" / f"Earth_{pal}pc_{sza}.txt"
-    elif model == "VULCAN":
-        path = find_vulcan_file(pal, sza)
+    elif model in ("VULCAN", "VULCAN NCHO", "VULCAN SNCHOAr"):
+        network = "SNCHOAr" if model == "VULCAN SNCHOAr" else "NCHO"
+        path = find_vulcan_file(pal, sza, network)
     elif model == "Kasting":
         path = REPO_DIR / "Kasting_1D_model" / f"{pal}pc" / f"SZA_{sza}" / "OUTPUT_PLOT.dat"
     if path is None or not path.is_file():
         return f"missing:{model}:{pal}:{sza}:{var_id}"
     stat = path.stat()
     return f"{path}:{stat.st_mtime_ns}:{stat.st_size}"
+
+
+# Oxygen levels on the paper O2–O3 curve, low to high. x = 1 is 100% PAL.
+CURVE_PALS = ["0.1", "0.5", "1", "5", "10", "50", "100", "150"]
+_DU_PER_M2 = 2.6867e20
+_GRAVITY = 9.81
+_AMU = 1.661e-27
+
+
+def oxygen_mixing_ratio(pal: str) -> float:
+    """O2 volume mixing ratio. 100% PAL is 0.21."""
+    return 0.21 * float(pal) / 100.0
+
+
+def _mean_molecular_mass(o2_mr: float) -> float:
+    """Dry-air mass per molecule, matching Early_Earth.py ``O3_col``."""
+    return ((28.0 * (1.0 - o2_mr)) + (o2_mr * 32.0)) * _AMU
+
+
+def ozone_column_du(pressure_hpa, mixing, o2_mr: float) -> float:
+    """Ozone column in Dobson units from mixing ratio and pressure.
+
+    This is the pressure integral used for the WACCM6 columns:
+    N = ∫ χ dp / (m g), then divide by 2.6867×10²⁰ m⁻².
+    """
+    pressure = np.asarray(pressure_hpa, dtype=float).reshape(-1) * 100.0
+    chi = np.asarray(mixing, dtype=float).reshape(-1)
+    count = min(pressure.size, chi.size)
+    pressure = pressure[:count]
+    chi = chi[:count]
+    ok = np.isfinite(pressure) & np.isfinite(chi) & (pressure > 0)
+    if ok.sum() < 2:
+        return float("nan")
+    order = np.argsort(pressure[ok])
+    integral = float(np.trapz(chi[ok][order], pressure[ok][order]))
+    column = abs(integral) / (_mean_molecular_mass(o2_mr) * _GRAVITY)
+    return column / _DU_PER_M2
+
+
+def waccm_ozone_column(pal: str) -> tuple[float, float, float]:
+    """Gaussian-mean ozone column and the min/max over latitude and longitude.
+
+    Interface pressures follow ``O3_col`` in early_earth_lib.py. A zonal-mean
+    file has no longitude, so the range is across latitude only.
+    """
+    path = find_waccm_file(pal)
+    if path is None:
+        return float("nan"), float("nan"), float("nan")
+    import xarray as xr
+
+    o2_mr = oxygen_mixing_ratio(pal)
+    mass = _mean_molecular_mass(o2_mr)
+    with xr.open_dataset(path, decode_times=False) as dataset:
+        if not all(name in dataset for name in ("O3", "PS", "hyai", "hybi", "P0", "gw")):
+            return float("nan"), float("nan"), float("nan")
+        ozone = dataset["O3"]
+        surface = dataset["PS"]
+        if "time" in ozone.dims:
+            ozone = ozone.mean("time")
+        if "time" in surface.dims:
+            surface = surface.mean("time")
+        ozone = ozone.squeeze(drop=True)
+        surface = surface.squeeze(drop=True)
+        hyai = np.asarray(dataset["hyai"].values, dtype=float)
+        hybi = np.asarray(dataset["hybi"].values, dtype=float)
+        p0 = float(np.asarray(dataset["P0"].values))
+        weights = np.asarray(dataset["gw"].values, dtype=float)
+        ozone_values = np.asarray(ozone.values, dtype=float)
+        surface_values = np.asarray(surface.values, dtype=float)
+    surface_values = surface_values.reshape((1,) + surface_values.shape)
+    pad = (1,) * (surface_values.ndim - 1)
+    interface = hyai.reshape((-1,) + pad) * p0 + hybi.reshape((-1,) + pad) * surface_values
+    thickness = interface[1:] - interface[:-1]
+    if thickness.shape != ozone_values.shape:
+        return float("nan"), float("nan"), float("nan")
+    column = np.sum(ozone_values * thickness / mass / _GRAVITY, axis=0) / _DU_PER_M2
+    column = np.asarray(column, dtype=float)
+    finite = column[np.isfinite(column)]
+    if finite.size == 0:
+        return float("nan"), float("nan"), float("nan")
+    if column.ndim == 2:
+        zonal = np.nanmean(column, axis=-1)
+    else:
+        zonal = column
+    if zonal.shape[0] != weights.shape[0]:
+        mean = float(np.nanmean(finite))
+    else:
+        mean = float(np.nansum(zonal * weights) / np.nansum(weights))
+    return mean, float(np.nanmin(finite)), float(np.nanmax(finite))
+
+
+def model_ozone_column(model: str, pal: str, sza: str) -> float:
+    """1D ozone column at one oxygen level and solar zenith angle."""
+    profile = load_profile(model, pal, sza, "O3")
+    if profile is None:
+        return float("nan")
+    return ozone_column_du(profile["pressure_hpa"], profile["value"], oxygen_mixing_ratio(pal))
+
+
+def _column_band(model: str, pal: str, angles: tuple[str, str]) -> tuple[float, float]:
+    values = [model_ozone_column(model, pal, angle) for angle in angles]
+    finite = [value for value in values if np.isfinite(value)]
+    if not finite:
+        return float("nan"), float("nan")
+    return float(min(finite)), float(max(finite))
+
+
+def ozone_oxygen_curve() -> dict:
+    """Paper O2–O3 curve: WACCM6 and the 1D solar-zenith-angle ranges.
+
+    NCHO uses 48.2° and 60°. SNCHOAr uses 45° and 60°. Those are the angles
+    present at every oxygen level. The other 1D models use 45° and 60°.
+    """
+    bands = {
+        "Kasting": ("45", "60"),
+        "Photochem": ("45", "60"),
+        "Atmos": ("45", "60"),
+        "VULCAN NCHO": ("48.2", "60"),
+        "VULCAN SNCHOAr": ("45", "60"),
+    }
+    x = []
+    waccm_mean = []
+    waccm_min = []
+    waccm_max = []
+    stored = {name: {"low": [], "high": []} for name in bands}
+    envelope_low = []
+    envelope_high = []
+    notes = []
+    for pal in CURVE_PALS:
+        x.append(float(pal) / 100.0)
+        mean, low, high = waccm_ozone_column(pal)
+        waccm_mean.append(mean)
+        waccm_min.append(low)
+        waccm_max.append(high)
+        if not np.isfinite(mean):
+            notes.append(f"WACCM6 has no {pal_label(pal)} ozone column.")
+        edges = []
+        for name, angles in bands.items():
+            band_low, band_high = _column_band(name, pal, angles)
+            stored[name]["low"].append(band_low)
+            stored[name]["high"].append(band_high)
+            if np.isfinite(band_low):
+                edges.extend([band_low, band_high])
+            else:
+                notes.append(
+                    f"{name} has no {pal_label(pal)} ozone column at "
+                    f"{angles[0]}° and {angles[1]}°."
+                )
+        if edges:
+            envelope_low.append(float(min(edges)))
+            envelope_high.append(float(max(edges)))
+        else:
+            envelope_low.append(float("nan"))
+            envelope_high.append(float("nan"))
+    return {
+        "x": x,
+        "waccm_mean": waccm_mean,
+        "waccm_min": waccm_min,
+        "waccm_max": waccm_max,
+        "bands": stored,
+        "envelope_low": envelope_low,
+        "envelope_high": envelope_high,
+        "notes": notes,
+    }
 
 
 def load_spectrum_file(filename: str) -> tuple[np.ndarray, np.ndarray] | None:
