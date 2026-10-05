@@ -1088,8 +1088,10 @@ def main() -> None:
             a is WACCM6 `jo2_a`, Kasting `PO2D`, and VULCAN O₂ branch 2.
             Photochem files in this archive do not contain J values. Atmos
             stores O₂ photolysis only, in `out.O2prates`. The O₂ photolysis
-            rate is 2 J(O₂) n(O₂), in molecules m⁻³ s⁻¹. That is the
-            odd-oxygen production rate from Early_Earth.py.
+            rate is the odd-oxygen production in molecules m⁻³ s⁻¹ from
+            Early_Earth.py. WACCM6, Kasting, and Atmos use 2 J(O₂) n(O₂).
+            VULCAN uses 2 J(O₂) n(O₂) × 3/8, with J taken from the total
+            O₂ branch (`J_sp` branch 0) and n from the saved number density.
 
             Zonal wind, meridional wind, cloud liquid, and cloud ice are shown
             as WACCM6 zonal means: longitude is averaged, and the plot is
@@ -1125,7 +1127,10 @@ def family_caption(var_id: str, quantity: str = "mixing") -> str:
     elif var_id.startswith("jo"):
         parts.append("J is the photolysis frequency in s⁻¹.")
     if var_id == "jo2_rate":
-        parts.append("2 J(O₂) n(O₂), with J(O₂) = jo2_a + jo2_b.")
+        parts.append(
+            "WACCM6, Kasting, and Atmos use 2 J(O₂) n(O₂), with J(O₂) = jo2_a + jo2_b. "
+            "VULCAN uses 2 J(O₂ branch 0) n(O₂) × 3/8."
+        )
     if quantity == "mixing" and var_id in data.CHEMICAL_IDS:
         if var_id in ("O", "OH"):
             parts.append("This axis extends below 10⁻⁹.")

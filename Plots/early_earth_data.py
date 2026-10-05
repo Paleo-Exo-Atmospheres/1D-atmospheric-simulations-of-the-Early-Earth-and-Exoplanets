@@ -1026,12 +1026,40 @@ def as_number_density(profile: dict | None) -> dict | None:
     return out
 
 
-def load_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
-    """Odd-oxygen production from O2 photolysis, 2 J(O2) n(O2).
+def _vulcan_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
+    """VULCAN odd-oxygen production, matching Early_Earth.py.
 
-    This is the rate plotted in Early_Earth.py (`prox_ox_W`, `prox_ox_K`,
-    `prox_ox_V`, and Atmos `2 (PO2_1 + PO2_2) n`). Units are molecules m^-3 s^-1.
+    ``prox_ox_V`` is ``2 * J_sp[('O2', 0)] * y(O2) * 1e6``. The comparison
+    plots then multiply by 3/8. Branch 0 is the total O2 photolysis frequency.
+    ``y`` is the number density in cm^-3, so the factor of 1e6 converts it to
+    molecules m^-3 s^-1.
     """
+    network = "SNCHOAr" if "SNCHO" in model else "NCHO"
+    path = find_vulcan_file(pal, sza, network)
+    if path is None:
+        return None
+    chemical = _read_vulcan_chemical(path)
+    species = chemical["species"]
+    if "O2" not in species or ("O2", 0) not in chemical["J_sp"]:
+        return None
+    jo2 = np.asarray(chemical["J_sp"][("O2", 0)], dtype=float)
+    n_o2 = np.asarray(chemical["y"], dtype=float)[:, species.index("O2")] * 1.0e6
+    count = min(jo2.shape[0], n_o2.shape[0], chemical["pco"].shape[0])
+    value = 2.0 * jo2[:count] * n_o2[:count] * (3.0 / 8.0)
+    label = "VULCAN SNCHOAr" if network == "SNCHOAr" else "VULCAN NCHO"
+    return _finish_1d(label, pal, sza, chemical["pco"][:count] / 1.0e3, value, str(path))
+
+
+def load_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
+    """Odd-oxygen production from O2 photolysis, molecules m^-3 s^-1.
+
+    WACCM6, Kasting, and Atmos use 2 J(O2) n(O2), as in ``prox_ox_W``,
+    ``prox_ox_K``, and the Atmos curves in Early_Earth.py. VULCAN uses
+    ``prox_ox_V * 3/8``: twice the total O2 frequency (``J_sp`` branch 0)
+    times the O2 number density, then the 3/8 factor from those plots.
+    """
+    if model.startswith("VULCAN"):
+        return _vulcan_o2_photolysis_rate(model, pal, sza)
     j_profile = _LOADERS[model](pal, sza, "jo2")
     o2_density = as_number_density(_LOADERS[model](pal, sza, "O2"))
     if j_profile is None or o2_density is None:
