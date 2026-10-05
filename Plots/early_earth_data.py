@@ -1050,6 +1050,29 @@ def _vulcan_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
     return _finish_1d(label, pal, sza, chemical["pco"][:count] / 1.0e3, value, str(path))
 
 
+PHOTOCHEM_O2_PHOTOLYSIS = REPO_DIR / "Photochem" / "o2_photolysis_rate.npz"
+
+
+def load_photochem_o2_photolysis_rate(pal: str, sza: str) -> dict | None:
+    """Odd-oxygen production stored from Early_Earth.py's Photochem calculation.
+
+    Saved Photochem atmospheres do not contain J. The stored rate is twice
+    the sum of the O2 + hv => O + O and O2 + hv => O + O1D branches, in
+    molecules m^-3 s^-1. Pressure is in hPa.
+    """
+    path = PHOTOCHEM_O2_PHOTOLYSIS
+    if not path.is_file():
+        return None
+    pressure_key = f"{pal}_{sza}_pressure_hpa"
+    rate_key = f"{pal}_{sza}_rate"
+    with np.load(path) as archive:
+        if pressure_key not in archive.files or rate_key not in archive.files:
+            return None
+        pressure = np.asarray(archive[pressure_key], dtype=float)
+        rate = np.asarray(archive[rate_key], dtype=float)
+    return _finish_1d("Photochem", pal, sza, pressure, rate, str(path))
+
+
 def load_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
     """Odd-oxygen production from O2 photolysis, molecules m^-3 s^-1.
 
@@ -1057,7 +1080,10 @@ def load_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
     ``prox_ox_K``, and the Atmos curves in Early_Earth.py. VULCAN uses
     ``prox_ox_V * 3/8``: twice the total O2 frequency (``J_sp`` branch 0)
     times the O2 number density, then the 3/8 factor from those plots.
+    Photochem uses the precomputed ``compute_ox_production`` profiles.
     """
+    if model == "Photochem":
+        return load_photochem_o2_photolysis_rate(pal, sza)
     if model.startswith("VULCAN"):
         return _vulcan_o2_photolysis_rate(model, pal, sza)
     j_profile = _LOADERS[model](pal, sza, "jo2")
@@ -1101,7 +1127,11 @@ def load_profile(model: str, pal: str, sza: str, var_id: str) -> dict | None:
 def source_stamp(model: str, pal: str, sza: str, var_id: str) -> str:
     """Cache key that changes when the underlying file changes."""
     if var_id == "jo2_rate":
-        return source_stamp(model, pal, sza, "jo2") + "|" + source_stamp(model, pal, sza, "O2")
+        stamp = source_stamp(model, pal, sza, "jo2") + "|" + source_stamp(model, pal, sza, "O2")
+        if model == "Photochem" and PHOTOCHEM_O2_PHOTOLYSIS.is_file():
+            stat = PHOTOCHEM_O2_PHOTOLYSIS.stat()
+            stamp += f"|{PHOTOCHEM_O2_PHOTOLYSIS}:{stat.st_mtime_ns}:{stat.st_size}"
+        return stamp
     path = None
     if model == "WACCM6":
         path = find_waccm_file(pal)

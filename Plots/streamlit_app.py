@@ -1086,12 +1086,15 @@ def main() -> None:
             s⁻¹. J(O₃) branch a is O₃ → O₂ + O(¹D) (WACCM6 `jo3_a`, Kasting
             `PO3D`, VULCAN branch 2). Branch b is O₃ → O₂ + O(³P). J(O₂) branch
             a is WACCM6 `jo2_a`, Kasting `PO2D`, and VULCAN O₂ branch 2.
-            Photochem files in this archive do not contain J values. Atmos
-            stores O₂ photolysis only, in `out.O2prates`. The O₂ photolysis
-            rate is the odd-oxygen production in molecules m⁻³ s⁻¹ from
-            Early_Earth.py. WACCM6, Kasting, and Atmos use 2 J(O₂) n(O₂).
-            VULCAN uses 2 J(O₂) n(O₂) × 3/8, with J taken from the total
-            O₂ branch (`J_sp` branch 0) and n from the saved number density.
+            Photochem output does not store J. Its O₂ photolysis rate is the
+            odd-oxygen production from O₂ + hv → O + O and O₂ + hv → O + O(¹D),
+            evaluated on the saved atmosphere as in Early_Earth.py. The 48.2°
+            curve uses that script’s settings file, whose solar zenith angle
+            is 60°. Atmos stores O₂ photolysis only, in `out.O2prates`. The
+            O₂ photolysis rate is the odd-oxygen production in molecules m⁻³ s⁻¹.
+            WACCM6, Kasting, and Atmos use 2 J(O₂) n(O₂). VULCAN uses
+            2 J(O₂) n(O₂) × 3/8, with J taken from the total O₂ branch
+            (`J_sp` branch 0) and n from the saved number density.
 
             Zonal wind, meridional wind, cloud liquid, and cloud ice are shown
             as WACCM6 zonal means: longitude is averaged, and the plot is
@@ -1129,7 +1132,9 @@ def family_caption(var_id: str, quantity: str = "mixing") -> str:
     if var_id == "jo2_rate":
         parts.append(
             "WACCM6, Kasting, and Atmos use 2 J(O₂) n(O₂), with J(O₂) = jo2_a + jo2_b. "
-            "VULCAN uses 2 J(O₂ branch 0) n(O₂) × 3/8."
+            "VULCAN uses 2 J(O₂ branch 0) n(O₂) × 3/8. "
+            "Photochem is the odd-oxygen production from the two O₂ + hv branches, "
+            "computed on the saved atmosphere."
         )
     if quantity == "mixing" and var_id in data.CHEMICAL_IDS:
         if var_id in ("O", "OH"):
