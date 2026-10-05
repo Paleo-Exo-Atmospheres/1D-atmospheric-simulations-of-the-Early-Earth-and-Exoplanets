@@ -815,8 +815,7 @@ def figure_ozone_column(curve: dict) -> go.Figure:
         rows=3,
         cols=2,
         specs=[[{"colspan": 2}, None], [{}, {}], [{}, {}]],
-        subplot_titles=("", "", "Kasting", "Photochem", "Atmos", "VULCAN"),
-        vertical_spacing=0.12,
+        vertical_spacing=0.14,
         horizontal_spacing=0.07,
     )
     x = curve["x"]
@@ -876,9 +875,29 @@ def figure_ozone_column(curve: dict) -> go.Figure:
     fig.update_yaxes(title_text=y_title, row=3, col=1)
     fig.update_yaxes(showticklabels=False, row=2, col=2)
     fig.update_yaxes(showticklabels=False, row=3, col=2)
-    for annotation in fig.layout.annotations:
-        if annotation.text:
-            annotation.font = dict(size=16, color="black")
+    # The spanned top panel means a title list is assigned to the wrong axes.
+    # Place each name on the panel that actually holds that model.
+    panel_titles = {
+        ("xaxis2", "yaxis2"): "Kasting",
+        ("xaxis3", "yaxis3"): "Photochem",
+        ("xaxis4", "yaxis4"): "Atmos",
+        ("xaxis5", "yaxis5"): "VULCAN",
+    }
+    for (x_name, y_name), title in panel_titles.items():
+        x_domain = fig.layout[x_name].domain
+        y_domain = fig.layout[y_name].domain
+        fig.add_annotation(
+            text=title,
+            x=(x_domain[0] + x_domain[1]) / 2.0,
+            y=y_domain[1],
+            xref="paper",
+            yref="paper",
+            xanchor="center",
+            yanchor="bottom",
+            yshift=6,
+            showarrow=False,
+            font=dict(size=16, color="black"),
+        )
     fig.update_layout(
         template="plotly_white",
         height=1120,
@@ -993,6 +1012,7 @@ def main() -> None:
             "VULCAN SNCHOAr is the lighter pink band from 45° to 60°. "
             "The 50% PAL SNCHOAr run at 60° is omitted: its temperature stays "
             "at 287 K through the stratosphere, so it is not a WACCM-temperature case. "
+            "Kasting at 50% PAL uses the same output for 45° and 60°, so that shade closes. "
             "Seasonal wind and circulation figures are not included."
         )
     elif style == STYLE_SPECTRUM:
