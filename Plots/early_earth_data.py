@@ -36,6 +36,10 @@ PROFILE_MODELS = [
     "VULCAN SNCHOAr",
     "Kasting",
 ]
+# Proxima Centauri b chemistry comparisons use one VULCAN network.
+# Kasting has no Proxima case in this archive.
+PROXIMA_MODELS = ["WACCM6", "Atmos", "Photochem", "VULCAN"]
+PROXIMA_PALS = ["100", "10", "1", "0.1"]
 
 # WACCM6 family definitions, used for every model so the curves are the same quantity.
 # NOX long_name: "nox (N+NO+NO2)"
@@ -147,6 +151,13 @@ VARIABLES = {
         "compare": True,
         "kind": "rate",
     },
+    "jo2_int": {
+        "label": "Integrated O₂ photolysis",
+        "units": "molecules m⁻² s⁻¹",
+        "log": True,
+        "compare": True,
+        "kind": "rate",
+    },
     "jo3": {
         "label": "J(O₃) total",
         "units": "s⁻¹",
@@ -214,30 +225,39 @@ PREFERRED_WACCM = {
 
 WACCM_TOKEN = {pal: f"Earth_{pal}pc_o2" for pal in PAL_ORDER}
 
-# Earth transmission files from PSG/Early_Earth_plots.py.
-# VULCAN has a 150% PAL Earth spectrum and no 100% PAL Earth spectrum.
+# Earth transmission files. These are the 60° PSG runs written on 6 Oct 2026
+# in ~/psg_outputs, matching PSG/Early_Earth_plots.py. 150% PAL was not rerun.
 EARTH_SPECTRA = {
     "150": {
         "VULCAN": "Earth_150pc_o2_1e12s_48.2SZA_WPT_1rtol_psg_output.txt",
     },
     "100": {
-        "Photochem": "Earth_100pc_48.2_psg_output.txt",
-        "Atmos": "PTZ_mixingratios_out_psg_output_100pc.txt",
+        "WACCM6": "Earth_100pc_o2.cam.h0.0009-0012_psg_output.txt",
+        "Atmos": "Atmos_100pc_SZA_60_psg_output.txt",
+        "Photochem": "Earth_100pc_60_psg_output.txt",
+        "VULCAN": "Earth_1e12s_60SZA_WPT_1rtol_psg_output.txt",
+        "Kasting": "Kasting_100pc_SZA_60_psg_output.txt",
     },
     "10": {
-        "VULCAN": "Earth_10pc_o2_1e12s_48.2SZA_WPT_1rtol_psg_output.txt",
-        "Photochem": "Earth_10pc_48.2_psg_output.txt",
-        "Atmos": "PTZ_mixingratios_out_psg_output_10pc.txt",
+        "WACCM6": "Earth_10pc_o2_ubc.cam.h0.0036_psg_output.txt",
+        "Atmos": "Atmos_10pc_SZA_60_psg_output.txt",
+        "Photochem": "Earth_10pc_60_psg_output.txt",
+        "VULCAN": "Earth_10pc_o2_1e12s_60SZA_WPT_1rtol_psg_output.txt",
+        "Kasting": "Kasting_10pc_SZA_60_psg_output.txt",
     },
     "1": {
-        "VULCAN": "Earth_1pc_o2_1e12s_48.2SZA_WPT_1rtol_psg_output.txt",
-        "Photochem": "Earth_1pc_48.2_psg_output.txt",
-        "Atmos": "PTZ_mixingratios_out_psg_output_1pc.txt",
+        "WACCM6": "Earth_1pc_o2_ubc.cam.h0.0044_psg_output.txt",
+        "Atmos": "Atmos_1pc_SZA_60_psg_output.txt",
+        "Photochem": "Earth_1pc_60_psg_output.txt",
+        "VULCAN": "Earth_1pc_o2_1e12s_60SZA_WPT_1rtol_psg_output.txt",
+        "Kasting": "Kasting_1pc_SZA_60_psg_output.txt",
     },
     "0.1": {
-        "VULCAN": "Earth_0.1pc_o2_1e12s_48.2SZA_WPT_1rtol_psg_output.txt",
-        "Photochem": "Earth_0.1pc_48.2_psg_output.txt",
-        "Atmos": "PTZ_mixingratios_out_psg_output_0.1pc.txt",
+        "WACCM6": "Earth_0.1pc_o2_ubc.cam.h0.0045_psg_output.txt",
+        "Atmos": "Atmos_0.1pc_SZA_60_psg_output.txt",
+        "Photochem": "Earth_0.1pc_60_psg_output.txt",
+        "VULCAN": "Earth_0.1pc_o2_1e12s_60SZA_WPT_1rtol_psg_output.txt",
+        "Kasting": "Kasting_0.1pc_SZA_60_psg_output.txt",
     },
 }
 
@@ -398,7 +418,12 @@ def _sort_profile(pressure: np.ndarray, value: np.ndarray, *extras: np.ndarray |
     return (pressure, value, *ordered)
 
 
-def _atmos_sza_dir(pal: str, sza: str) -> Path | None:
+def _atmos_sza_dir(pal: str, sza: str, planet: str = "earth") -> Path | None:
+    if planet == "proxima":
+        folder = REPO_DIR / "Atmos" / "Proxima_Centauri" / f"{pal}pc"
+        if (folder / "PTZ_mixingratios_out.dist").is_file():
+            return folder
+        return None
     root = REPO_DIR / "Atmos" / f"{pal}pc"
     direct = root / f"SZA_{sza}"
     if (direct / "PTZ_mixingratios_out.dist").is_file():
@@ -458,8 +483,8 @@ def _interp_on(x_out: np.ndarray, x_src: np.ndarray, y_src: np.ndarray) -> np.nd
     return np.interp(x_out, x_sorted[valid], y_sorted[valid], left=np.nan, right=np.nan)
 
 
-def load_atmos(pal: str, sza: str, var_id: str) -> dict | None:
-    folder = _atmos_sza_dir(pal, sza)
+def load_atmos(pal: str, sza: str, var_id: str, planet: str = "earth") -> dict | None:
+    folder = _atmos_sza_dir(pal, sza, planet)
     if folder is None:
         return None
     frame = read_whitespace_table(folder / "PTZ_mixingratios_out.dist")
@@ -493,10 +518,13 @@ def load_atmos(pal: str, sza: str, var_id: str) -> dict | None:
     return _finish_1d("Atmos", pal, sza, pressure_hpa, value, str(folder), air)
 
 
-def load_photochem(pal: str, sza: str, var_id: str) -> dict | None:
+def load_photochem(pal: str, sza: str, var_id: str, planet: str = "earth") -> dict | None:
     if VARIABLES[var_id]["kind"] == "j":
         return None
-    path = REPO_DIR / "Photochem" / f"{pal}pc" / f"Earth_{pal}pc_{sza}.txt"
+    if planet == "proxima":
+        path = REPO_DIR / "Photochem" / "Proxima_Centauri" / f"Proxima_{pal}pc_48.2.txt"
+    else:
+        path = REPO_DIR / "Photochem" / f"{pal}pc" / f"Earth_{pal}pc_{sza}.txt"
     if not path.is_file():
         return None
     frame = read_whitespace_table(path)
@@ -574,6 +602,7 @@ def _vulcan_dirs() -> list[Path]:
         candidates.append(Path(env))
     candidates.append(REPO_DIR / "VULCAN" / "output")
     candidates.append(Path.home() / "VULCAN" / "output")
+    candidates.append(Path.home() / "VIH_cases" / "output")
     found = []
     for path in candidates:
         if path.is_dir() and path not in found:
@@ -636,7 +665,7 @@ def _read_vulcan_chemical(path: Path) -> dict:
                     archive["j_species"], archive["j_branch"], archive["j_rate"]
                 )
             }
-            return {
+            chemical = {
                 "species": species,
                 "ymix": np.asarray(archive["ymix"], dtype=float),
                 "y": np.asarray(archive["y"], dtype=float),
@@ -644,11 +673,14 @@ def _read_vulcan_chemical(path: Path) -> dict:
                 "Tco": np.asarray(archive["Tco"], dtype=float),
                 "J_sp": j_table,
             }
+            if "dz_m" in archive.files:
+                chemical["dz_m"] = np.asarray(archive["dz_m"], dtype=float)
+            return chemical
     with path.open("rb") as handle:
         dataset = pickle.load(handle)
     variable = dataset["variable"]
     atmosphere = dataset["atm"]
-    return {
+    chemical = {
         "species": list(variable["species"]),
         "ymix": np.asarray(variable["ymix"], dtype=float),
         "y": np.asarray(variable["y"], dtype=float),
@@ -656,12 +688,39 @@ def _read_vulcan_chemical(path: Path) -> dict:
         "Tco": np.asarray(atmosphere["Tco"], dtype=float),
         "J_sp": variable["J_sp"],
     }
+    if "dz" in atmosphere:
+        chemical["dz_m"] = np.asarray(atmosphere["dz"], dtype=float) / 100.0
+    return chemical
 
 
-def load_vulcan(pal: str, sza: str, var_id: str, network: str = "NCHO") -> dict | None:
-    path = find_vulcan_file(pal, sza, network)
-    if path is None:
+# Files used for the Proxima Centauri b chemistry plots in Early_Earth.py.
+PCB_VULCAN = {
+    "100": "PCb_1e12s_482SZA_WBC_WPT_1rtol",
+    "50": "PCb_50pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
+    "10": "PCb_10pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
+    "5": "PCb_5pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
+    "1": "PCb_1pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
+    "0.5": "PCb_0.5pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
+    "0.1": "PCb_0.1pc_o2_1e12s_48.2SZA_WBC_WPT_1rtol_C24_params",
+}
+
+
+def find_pcb_vulcan_file(pal: str) -> Path | None:
+    stem = PCB_VULCAN.get(pal)
+    if stem is None:
         return None
+    for folder in _vulcan_dirs():
+        condensed = folder / f"{stem}.npz"
+        if condensed.is_file():
+            return condensed
+    for folder in _vulcan_dirs():
+        original = folder / f"{stem}.vul"
+        if original.is_file():
+            return original
+    return None
+
+
+def _profile_from_vulcan(path: Path, pal: str, sza: str, var_id: str, label: str) -> dict | None:
     chemical = _read_vulcan_chemical(path)
     species = chemical["species"]
     mixing = chemical["ymix"]
@@ -691,8 +750,28 @@ def load_vulcan(pal: str, sza: str, var_id: str, network: str = "NCHO") -> dict 
     air = _vulcan_air_m3(chemical, species)
     if air is None:
         air = _air_from_pressure(pressure_hpa, chemical["Tco"])
+    profile = _finish_1d(label, pal, sza, pressure_hpa, value, str(path), air)
+    if profile is not None and "dz_m" in chemical:
+        profile["dz_m"] = np.asarray(chemical["dz_m"], dtype=float)
+        profile["pressure_unsorted_hpa"] = chemical["pco"] / 1.0e3
+    return profile
+
+
+def load_vulcan_pcb(pal: str, sza: str, var_id: str) -> dict | None:
+    """Proxima Centauri b VULCAN case used in the Early_Earth.py comparisons."""
+    del sza
+    path = find_pcb_vulcan_file(pal)
+    if path is None:
+        return None
+    return _profile_from_vulcan(path, pal, "48.2", var_id, "VULCAN")
+
+
+def load_vulcan(pal: str, sza: str, var_id: str, network: str = "NCHO") -> dict | None:
+    path = find_vulcan_file(pal, sza, network)
+    if path is None:
+        return None
     label = "VULCAN SNCHOAr" if network == "SNCHOAr" else "VULCAN NCHO"
-    return _finish_1d(label, pal, sza, pressure_hpa, value, str(path), air)
+    return _profile_from_vulcan(path, pal, sza, var_id, label)
 
 
 def load_vulcan_ncho(pal: str, sza: str, var_id: str) -> dict | None:
@@ -840,7 +919,16 @@ def _waccm_dirs() -> list[Path]:
     return found
 
 
-def find_waccm_file(pal: str) -> Path | None:
+def find_waccm_file(pal: str, planet: str = "earth") -> Path | None:
+    if planet == "proxima":
+        root = WACCM_DIR / "proxima" / f"{pal}pc"
+        if not root.is_dir():
+            return None
+        zonal = sorted(root.glob("*subset_zonal.nc"))
+        if zonal:
+            return zonal[0]
+        files = sorted(path for path in root.glob("*.nc") if path.is_file())
+        return files[0] if files else None
     token = WACCM_TOKEN[pal]
     source_name = PREFERRED_WACCM[pal]
     # Zonal-mean chemistry is what the app plots. Prefer it over a full-longitude subset.
@@ -877,13 +965,13 @@ def _waccm_names(var_id: str) -> list[str]:
     return [var_id]
 
 
-def load_waccm(pal: str, sza: str, var_id: str) -> dict | None:
+def load_waccm(pal: str, sza: str, var_id: str, planet: str = "earth") -> dict | None:
     """Global-mean and zonal-mean profile for one WACCM6 history file.
 
     ``sza`` is unused: WACCM6 is a 3D climate run, not a fixed-zenith 1D case.
     """
     del sza
-    path = find_waccm_file(pal)
+    path = find_waccm_file(pal, planet)
     if path is None:
         return None
     import xarray as xr
@@ -1026,7 +1114,7 @@ def as_number_density(profile: dict | None) -> dict | None:
     return out
 
 
-def _vulcan_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
+def _vulcan_o2_photolysis_rate(model: str, pal: str, sza: str, planet: str = "earth") -> dict | None:
     """VULCAN odd-oxygen production, matching Early_Earth.py.
 
     ``prox_ox_V`` is ``2 * J_sp[('O2', 0)] * y(O2) * 1e6``. The comparison
@@ -1034,8 +1122,14 @@ def _vulcan_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
     ``y`` is the number density in cm^-3, so the factor of 1e6 converts it to
     molecules m^-3 s^-1.
     """
-    network = "SNCHOAr" if "SNCHO" in model else "NCHO"
-    path = find_vulcan_file(pal, sza, network)
+    if planet == "proxima":
+        path = find_pcb_vulcan_file(pal)
+        label = "VULCAN"
+        sza = "48.2"
+    else:
+        network = "SNCHOAr" if "SNCHO" in model else "NCHO"
+        path = find_vulcan_file(pal, sza, network)
+        label = "VULCAN SNCHOAr" if network == "SNCHOAr" else "VULCAN NCHO"
     if path is None:
         return None
     chemical = _read_vulcan_chemical(path)
@@ -1046,21 +1140,25 @@ def _vulcan_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
     n_o2 = np.asarray(chemical["y"], dtype=float)[:, species.index("O2")] * 1.0e6
     count = min(jo2.shape[0], n_o2.shape[0], chemical["pco"].shape[0])
     value = 2.0 * jo2[:count] * n_o2[:count] * (3.0 / 8.0)
-    label = "VULCAN SNCHOAr" if network == "SNCHOAr" else "VULCAN NCHO"
     return _finish_1d(label, pal, sza, chemical["pco"][:count] / 1.0e3, value, str(path))
 
 
 PHOTOCHEM_O2_PHOTOLYSIS = REPO_DIR / "Photochem" / "o2_photolysis_rate.npz"
+PHOTOCHEM_PROXIMA_O2_PHOTOLYSIS = REPO_DIR / "Photochem" / "proxima_o2_photolysis_rate.npz"
 
 
-def load_photochem_o2_photolysis_rate(pal: str, sza: str) -> dict | None:
+def load_photochem_o2_photolysis_rate(pal: str, sza: str, planet: str = "earth") -> dict | None:
     """Odd-oxygen production stored from Early_Earth.py's Photochem calculation.
 
     Saved Photochem atmospheres do not contain J. The stored rate is twice
     the sum of the O2 + hv => O + O and O2 + hv => O + O1D branches, in
     molecules m^-3 s^-1. Pressure is in hPa.
     """
-    path = PHOTOCHEM_O2_PHOTOLYSIS
+    if planet == "proxima":
+        path = PHOTOCHEM_PROXIMA_O2_PHOTOLYSIS
+        sza = "48.2"
+    else:
+        path = PHOTOCHEM_O2_PHOTOLYSIS
     if not path.is_file():
         return None
     pressure_key = f"{pal}_{sza}_pressure_hpa"
@@ -1073,21 +1171,8 @@ def load_photochem_o2_photolysis_rate(pal: str, sza: str) -> dict | None:
     return _finish_1d("Photochem", pal, sza, pressure, rate, str(path))
 
 
-def load_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
-    """Odd-oxygen production from O2 photolysis, molecules m^-3 s^-1.
-
-    WACCM6, Kasting, and Atmos use 2 J(O2) n(O2), as in ``prox_ox_W``,
-    ``prox_ox_K``, and the Atmos curves in Early_Earth.py. VULCAN uses
-    ``prox_ox_V * 3/8``: twice the total O2 frequency (``J_sp`` branch 0)
-    times the O2 number density, then the 3/8 factor from those plots.
-    Photochem uses the precomputed ``compute_ox_production`` profiles.
-    """
-    if model == "Photochem":
-        return load_photochem_o2_photolysis_rate(pal, sza)
-    if model.startswith("VULCAN"):
-        return _vulcan_o2_photolysis_rate(model, pal, sza)
-    j_profile = _LOADERS[model](pal, sza, "jo2")
-    o2_density = as_number_density(_LOADERS[model](pal, sza, "O2"))
+def _rate_from_j_and_o2(j_profile: dict | None, o2_density: dict | None) -> dict | None:
+    """2 J(O2) n(O2) on a shared pressure grid. Both inputs are already sorted."""
     if j_profile is None or o2_density is None:
         return None
     count = min(np.asarray(j_profile["value"]).shape[0], np.asarray(o2_density["value"]).shape[0])
@@ -1112,52 +1197,348 @@ def load_o2_photolysis_rate(model: str, pal: str, sza: str) -> dict | None:
     return result
 
 
-def load_profile(model: str, pal: str, sza: str, var_id: str) -> dict | None:
+def load_o2_photolysis_rate(model: str, pal: str, sza: str, planet: str = "earth") -> dict | None:
+    """Odd-oxygen production from O2 photolysis, molecules m^-3 s^-1.
+
+    WACCM6, Kasting, and Atmos use 2 J(O2) n(O2), as in ``prox_ox_W``,
+    ``prox_ox_K``, and the Atmos curves in Early_Earth.py. VULCAN uses
+    ``prox_ox_V * 3/8``: twice the total O2 frequency (``J_sp`` branch 0)
+    times the O2 number density, then the 3/8 factor from those plots.
+    Photochem uses the precomputed ``compute_ox_production`` profiles.
+    """
+    if planet == "proxima" and model == "Kasting":
+        return None
+    if planet == "proxima":
+        sza = "48.2"
+    if model == "Photochem":
+        return load_photochem_o2_photolysis_rate(pal, sza, planet)
+    if model.startswith("VULCAN"):
+        return _vulcan_o2_photolysis_rate(model, pal, sza, planet)
+    if planet == "proxima" and model == "Atmos":
+        j_profile = load_atmos(pal, sza, "jo2", planet="proxima")
+        o2_density = as_number_density(load_atmos(pal, sza, "O2", planet="proxima"))
+        return _rate_from_j_and_o2(j_profile, o2_density)
+    if planet == "proxima" and model == "WACCM6":
+        j_profile = load_waccm(pal, sza, "jo2", planet="proxima")
+        o2_density = as_number_density(load_waccm(pal, sza, "O2", planet="proxima"))
+        return _rate_from_j_and_o2(j_profile, o2_density)
+    j_profile = _LOADERS[model](pal, sza, "jo2")
+    o2_density = as_number_density(_LOADERS[model](pal, sza, "O2"))
+    return _rate_from_j_and_o2(j_profile, o2_density)
+
+
+def _column_from_surface(layer) -> np.ndarray:
+    """Column above each level for a surface-first array.
+
+    This is the reverse cumulative sum used by ``photochem_integrated_JO2``,
+    ``vulcan_integrated_JO2``, and ``cumulative_from_toa`` in Early_Earth.py.
+    Index 0 is the ground.
+    """
+    production = np.asarray(layer, dtype=float)
+    return production[::-1].cumsum()[::-1]
+
+
+def _photochem_rate_arrays(pal: str, sza: str, planet: str) -> tuple[np.ndarray, np.ndarray, Path] | None:
+    if planet == "proxima":
+        path = PHOTOCHEM_PROXIMA_O2_PHOTOLYSIS
+        sza = "48.2"
+    else:
+        path = PHOTOCHEM_O2_PHOTOLYSIS
+    if not path.is_file():
+        return None
+    pressure_key = f"{pal}_{sza}_pressure_hpa"
+    rate_key = f"{pal}_{sza}_rate"
+    with np.load(path) as archive:
+        if pressure_key not in archive.files or rate_key not in archive.files:
+            return None
+        pressure = np.asarray(archive[pressure_key], dtype=float)
+        rate = np.asarray(archive[rate_key], dtype=float)
+    return pressure, rate, path
+
+
+def _atmos_rate_arrays(pal: str, sza: str, planet: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, Path] | None:
+    """Local O2 photolysis rate and altitude, in the saved file order."""
+    folder = _atmos_sza_dir(pal, sza, planet)
+    if folder is None:
+        return None
+    frame = read_whitespace_table(folder / "PTZ_mixingratios_out.dist")
+    pressure = _column(frame, "PRESS")
+    altitude = _column(frame, "ALT")
+    oxygen = _column(frame, "O2")
+    temperature = _column(frame, "TEMP", "temp", "T")
+    rates = folder / "out.O2prates"
+    if pressure is None or altitude is None or oxygen is None or temperature is None or not rates.is_file():
+        return None
+    rate_frame = pd.read_csv(
+        rates,
+        sep=r"\s+",
+        header=None,
+        names=["Z", "PO2_1", "PO2_2"],
+        engine="python",
+    )
+    branch_a = _interp_on(altitude, rate_frame["Z"].to_numpy(), rate_frame["PO2_1"].to_numpy())
+    branch_b = _interp_on(altitude, rate_frame["Z"].to_numpy(), rate_frame["PO2_2"].to_numpy())
+    pressure_hpa = pressure * 1.0e3
+    air = _air_from_pressure(pressure_hpa, temperature)
+    count = min(air.shape[0], oxygen.shape[0], branch_a.shape[0], altitude.shape[0])
+    rate = 2.0 * (branch_a[:count] + branch_b[:count]) * air[:count] * oxygen[:count]
+    return pressure_hpa[:count], rate, altitude[:count], folder
+
+
+def _kasting_rate_arrays(pal: str, sza: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, Path] | None:
+    folder = REPO_DIR / "Kasting_1D_model" / f"{pal}pc" / f"SZA_{sza}"
+    path = folder / "OUTPUT_PLOT.dat"
+    if not path.is_file():
+        return None
+    frame = read_whitespace_table(path)
+    pressure = _column(frame, "PRESS")
+    altitude = _column(frame, "Z")
+    number = _column(frame, "NumO2")
+    po2 = _column(frame, "PO2")
+    po2d = _column(frame, "PO2D")
+    if pressure is None or altitude is None or number is None or po2 is None or po2d is None:
+        return None
+    count = min(pressure.shape[0], altitude.shape[0], number.shape[0], po2.shape[0], po2d.shape[0])
+    # prox_ox_K: 2 (PO2 + PO2D) * NumO2 * 1e6, with NumO2 in cm^-3.
+    rate = 2.0 * (po2[:count] + po2d[:count]) * number[:count] * 1.0e6
+    return pressure[:count] / 1.0e3, rate, altitude[:count], path
+
+
+def _vulcan_rate_arrays(model: str, pal: str, sza: str, planet: str) -> tuple[np.ndarray, np.ndarray, np.ndarray, str, Path] | None:
+    if planet == "proxima":
+        path = find_pcb_vulcan_file(pal)
+        label = "VULCAN"
+    else:
+        network = "SNCHOAr" if "SNCHO" in model else "NCHO"
+        path = find_vulcan_file(pal, sza, network)
+        label = "VULCAN SNCHOAr" if network == "SNCHOAr" else "VULCAN NCHO"
+    if path is None:
+        return None
+    chemical = _read_vulcan_chemical(path)
+    species = chemical["species"]
+    if "O2" not in species or ("O2", 0) not in chemical["J_sp"] or "dz_m" not in chemical:
+        return None
+    jo2 = np.asarray(chemical["J_sp"][("O2", 0)], dtype=float)
+    n_o2 = np.asarray(chemical["y"], dtype=float)[:, species.index("O2")] * 1.0e6
+    thickness = np.asarray(chemical["dz_m"], dtype=float)
+    count = min(jo2.shape[0], n_o2.shape[0], chemical["pco"].shape[0], thickness.shape[0])
+    rate = 2.0 * jo2[:count] * n_o2[:count] * (3.0 / 8.0)
+    return chemical["pco"][:count] / 1.0e3, rate, thickness[:count], label, path
+
+
+def load_waccm_integrated_o2(pal: str, planet: str = "earth") -> dict | None:
+    """Cumulative O2 photolysis from the top, matching ``cum_int_O2_photo``.
+
+    Each layer is O2 mixing ratio times the hybrid-pressure thickness, divided
+    by mean molecular mass and g = 9.81, then multiplied by 2 (jo2_a + jo2_b).
+    CESM level 0 is the top of the atmosphere, so the sum runs downward.
+    The plotted curve is the Gaussian-weighted mean. The zonal array is the
+    same column at each latitude.
+    """
+    path = find_waccm_file(pal, planet)
+    if path is None:
+        return None
+    import xarray as xr
+
+    with xr.open_dataset(path, decode_times=False) as dataset:
+        needed = ("O2", "jo2_a", "jo2_b", "PS", "hyai", "hybi", "P0", "gw", "lev")
+        if not all(name in dataset for name in needed):
+            return None
+        oxygen = _zonal_field(dataset["O2"])
+        frequency = _zonal_field(dataset["jo2_a"] + dataset["jo2_b"])
+        surface = _zonal_field(dataset["PS"])
+        if "lat" in oxygen.dims:
+            oxygen = oxygen.transpose("lev", "lat")
+            frequency = frequency.transpose("lev", "lat")
+        latitude = None
+        if "lat" in dataset:
+            latitude = np.asarray(dataset["lat"].values, dtype=float)
+        hyai = np.asarray(dataset["hyai"].values, dtype=float)
+        hybi = np.asarray(dataset["hybi"].values, dtype=float)
+        p0 = float(np.asarray(dataset["P0"].values))
+        weights = np.asarray(dataset["gw"].values, dtype=float)
+        oxygen_values = np.asarray(oxygen.values, dtype=float)
+        frequency_values = np.asarray(frequency.values, dtype=float)
+        surface_values = np.asarray(surface.values, dtype=float)
+    if oxygen_values.ndim == 1:
+        oxygen_values = oxygen_values[:, None]
+        frequency_values = frequency_values[:, None]
+        surface_values = np.array([float(np.mean(surface_values))])
+        weights = np.array([1.0])
+    if oxygen_values.shape != frequency_values.shape:
+        return None
+    if surface_values.shape[0] != oxygen_values.shape[1]:
+        return None
+    interface = hyai[:, None] * p0 + hybi[:, None] * surface_values[None, :]
+    if interface.shape[0] != oxygen_values.shape[0] + 1:
+        return None
+    thickness = interface[1:, :] - interface[:-1, :]
+    mass = _mean_molecular_mass(oxygen_mixing_ratio(pal))
+    layer = oxygen_values * thickness / (mass * 9.81) * (2.0 * frequency_values)
+    column = np.cumsum(layer, axis=0)
+    value = np.nansum(column * weights[None, :], axis=1) / np.nansum(weights)
+    pressure_hpa, zonal_pressure = _waccm_pressure_from_parts(
+        path, oxygen_values.shape[0]
+    )
+    if pressure_hpa is None or pressure_hpa.shape[0] != value.shape[0]:
+        return None
+    order = np.argsort(pressure_hpa)
+    return {
+        "model": "WACCM6",
+        "pal": pal,
+        "sza": "3D",
+        "pressure_hpa": pressure_hpa[order],
+        "value": value[order],
+        "lat": latitude,
+        "zonal": column[order, :],
+        "zonal_pressure_hpa": None if zonal_pressure is None else zonal_pressure[order, :],
+        "source": str(path),
+        "air_m3": None,
+        "air_zonal": None,
+        "density": None,
+        "density_zonal": None,
+    }
+
+
+def _waccm_pressure_from_parts(path: Path, nlev: int) -> tuple[np.ndarray | None, np.ndarray | None]:
+    import xarray as xr
+
+    with xr.open_dataset(path, decode_times=False) as dataset:
+        pressure, zonal = _waccm_pressure(dataset)
+    if pressure.shape[0] != nlev:
+        return None, None
+    return pressure, zonal
+
+
+def load_integrated_o2_photolysis(model: str, pal: str, sza: str, planet: str = "earth") -> dict | None:
+    """Integrated O2 photolysis, molecules m^-2 s^-1, from the top downward."""
+    if planet == "proxima":
+        sza = "48.2"
+        if model == "Kasting":
+            return None
+    if model == "WACCM6":
+        return load_waccm_integrated_o2(pal, planet)
+    if model == "Photochem":
+        arrays = _photochem_rate_arrays(pal, sza, planet)
+        if arrays is None:
+            return None
+        pressure, rate, path = arrays
+        # Early_Earth.py multiplies by 1000 m, the 1 km Photochem grid spacing.
+        column = _column_from_surface(rate * 1000.0)
+        return _finish_1d("Photochem", pal, sza, pressure, column, str(path))
+    if model == "Atmos":
+        arrays = _atmos_rate_arrays(pal, sza, planet)
+        if arrays is None:
+            return None
+        pressure, rate, altitude_cm, folder = arrays
+        thickness = np.abs(np.gradient(altitude_cm / 100.0))
+        column = _column_from_surface(rate * thickness)
+        return _finish_1d("Atmos", pal, sza, pressure, column, str(folder))
+    if model == "Kasting":
+        arrays = _kasting_rate_arrays(pal, sza)
+        if arrays is None:
+            return None
+        pressure, rate, altitude_cm, path = arrays
+        thickness = np.abs(np.gradient(altitude_cm / 100.0))
+        column = _column_from_surface(rate * thickness)
+        return _finish_1d("Kasting", pal, sza, pressure, column, str(path))
+    if model.startswith("VULCAN"):
+        arrays = _vulcan_rate_arrays(model, pal, sza, planet)
+        if arrays is None:
+            return None
+        pressure, rate, thickness, label, path = arrays
+        column = _column_from_surface(rate * thickness)
+        return _finish_1d(label, pal, sza, pressure, column, str(path))
+    return None
+
+
+def load_profile(model: str, pal: str, sza: str, var_id: str, planet: str = "earth") -> dict | None:
     if var_id not in VARIABLES:
         raise KeyError(var_id)
     if model not in _LOADERS:
         raise KeyError(model)
+    if planet == "proxima" and model in ("VULCAN NCHO", "VULCAN SNCHOAr"):
+        model = "VULCAN"
     if not VARIABLES[var_id]["compare"] and model != "WACCM6":
         return None
+    if planet == "proxima":
+        sza = "48.2"
+        if model == "Kasting":
+            return None
+    if var_id == "jo2_int":
+        return load_integrated_o2_photolysis(model, pal, sza, planet)
     if var_id == "jo2_rate":
-        return load_o2_photolysis_rate(model, pal, sza)
+        return load_o2_photolysis_rate(model, pal, sza, planet)
+    if planet == "proxima":
+        if model == "WACCM6":
+            return load_waccm(pal, sza, var_id, planet="proxima")
+        if model == "Atmos":
+            return load_atmos(pal, sza, var_id, planet="proxima")
+        if model == "Photochem":
+            return load_photochem(pal, sza, var_id, planet="proxima")
+        if model == "VULCAN":
+            return load_vulcan_pcb(pal, sza, var_id)
+        return None
     return _LOADERS[model](pal, sza, var_id)
 
 
-def source_stamp(model: str, pal: str, sza: str, var_id: str) -> str:
+def _stamp_file(path: Path | None) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    stat = path.stat()
+    return f"{path}:{stat.st_mtime_ns}:{stat.st_size}"
+
+
+def source_stamp(model: str, pal: str, sza: str, var_id: str, planet: str = "earth") -> str:
     """Cache key that changes when the underlying file changes."""
+    if planet == "proxima" and model in ("VULCAN NCHO", "VULCAN SNCHOAr"):
+        model = "VULCAN"
+    if planet == "proxima":
+        sza = "48.2"
+    if var_id == "jo2_int":
+        base = source_stamp(model, pal, sza, "jo2_rate", planet)
+        if "missing:" in base:
+            return base
+        return "int|" + base
     if var_id == "jo2_rate":
-        stamp = source_stamp(model, pal, sza, "jo2") + "|" + source_stamp(model, pal, sza, "O2")
-        if model == "Photochem" and PHOTOCHEM_O2_PHOTOLYSIS.is_file():
-            stat = PHOTOCHEM_O2_PHOTOLYSIS.stat()
-            stamp += f"|{PHOTOCHEM_O2_PHOTOLYSIS}:{stat.st_mtime_ns}:{stat.st_size}"
+        stamp = (
+            source_stamp(model, pal, sza, "jo2", planet)
+            + "|"
+            + source_stamp(model, pal, sza, "O2", planet)
+        )
+        if model == "Photochem":
+            rate_path = PHOTOCHEM_PROXIMA_O2_PHOTOLYSIS if planet == "proxima" else PHOTOCHEM_O2_PHOTOLYSIS
+            extra = _stamp_file(rate_path)
+            if extra:
+                stamp += "|" + extra
         return stamp
     path = None
     if model == "WACCM6":
-        path = find_waccm_file(pal)
+        path = find_waccm_file(pal, planet)
     elif model == "Atmos":
-        folder = _atmos_sza_dir(pal, sza)
+        folder = _atmos_sza_dir(pal, sza, planet)
         path = None if folder is None else folder / "PTZ_mixingratios_out.dist"
         if folder is not None and var_id.startswith("jo2"):
             rates = folder / "out.O2prates"
-            if path is not None and path.is_file() and rates.is_file():
-                rate_stat = rates.stat()
-                file_stat = path.stat()
-                return (
-                    f"{path}:{file_stat.st_mtime_ns}:{file_stat.st_size}"
-                    f"|{rates}:{rate_stat.st_mtime_ns}:{rate_stat.st_size}"
-                )
+            file_stamp = _stamp_file(path)
+            rate_stamp = _stamp_file(rates)
+            if file_stamp and rate_stamp:
+                return f"{file_stamp}|{rate_stamp}"
+    elif model == "Photochem" and planet == "proxima":
+        path = REPO_DIR / "Photochem" / "Proxima_Centauri" / f"Proxima_{pal}pc_48.2.txt"
     elif model == "Photochem":
         path = REPO_DIR / "Photochem" / f"{pal}pc" / f"Earth_{pal}pc_{sza}.txt"
+    elif model == "VULCAN" and planet == "proxima":
+        path = find_pcb_vulcan_file(pal)
     elif model in ("VULCAN", "VULCAN NCHO", "VULCAN SNCHOAr"):
         network = "SNCHOAr" if model == "VULCAN SNCHOAr" else "NCHO"
         path = find_vulcan_file(pal, sza, network)
-    elif model == "Kasting":
+    elif model == "Kasting" and planet == "earth":
         path = REPO_DIR / "Kasting_1D_model" / f"{pal}pc" / f"SZA_{sza}" / "OUTPUT_PLOT.dat"
-    if path is None or not path.is_file():
-        return f"missing:{model}:{pal}:{sza}:{var_id}"
-    stat = path.stat()
-    return f"{path}:{stat.st_mtime_ns}:{stat.st_size}"
+    stamped = _stamp_file(path)
+    if stamped is None:
+        return f"missing:{planet}:{model}:{pal}:{sza}:{var_id}"
+    return stamped
 
 
 # Oxygen levels on the paper O2–O3 curve, low to high. x = 1 is 100% PAL.

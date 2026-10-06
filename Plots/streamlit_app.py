@@ -134,9 +134,9 @@ st.markdown(
 
 
 @st.cache_data(show_spinner="Reading model output…")
-def cached_profile(model: str, pal: str, sza: str, var_id: str, _stamp: str) -> dict | None:
+def cached_profile(model: str, pal: str, sza: str, var_id: str, planet: str, _stamp: str) -> dict | None:
     del _stamp
-    profile = data.load_profile(model, pal, sza, var_id)
+    profile = data.load_profile(model, pal, sza, var_id, planet)
     if profile is None:
         return None
     packed = dict(profile)
@@ -234,7 +234,14 @@ LINEAR_X = {
 ZONAL_FIELDS = ("U", "V", "CLDLIQ", "CLDICE")
 
 
-def x_limits(var_id: str, quantity: str) -> tuple[float, float] | None:
+def x_limits(var_id: str, quantity: str, planet: str = "earth") -> tuple[float, float] | None:
+    if var_id == "jo2_int":
+        return (5e15, 2e17)
+    if planet == "proxima" and quantity != "density":
+        if var_id == "O3":
+            return (1e-10, 1e-4)
+        if var_id == "jo2_rate":
+            return (1e10, 5e12)
     if quantity == "density" and var_id in DENSITY_X:
         return DENSITY_X[var_id]
     if var_id in MIXING_X:
@@ -242,13 +249,17 @@ def x_limits(var_id: str, quantity: str) -> tuple[float, float] | None:
     return LINEAR_X.get(var_id)
 
 
-def pressure_limits(var_id: str, quantity: str) -> tuple[float, float]:
+def pressure_limits(var_id: str, quantity: str, planet: str = "earth") -> tuple[float, float]:
     """Surface pressure first, top-of-plot pressure second. Both in hPa.
 
     Windows follow the comparison figures in Early_Earth.py.
     """
     if var_id in ("CLDLIQ", "CLDICE"):
         return 1e3, 50.0
+    if var_id == "jo2_int":
+        return 1e3, 1e-5
+    if planet == "proxima" and var_id in ("O3", "jo2_rate"):
+        return 1e3, 1e-5
     if quantity == "density" and var_id in ("O3", "O"):
         return 1e3, 1e-1
     if var_id in ("NOX", "HOX", "H2O", "OH", "jo2", "jo2_a", "jo2_b", "jo2_rate"):
@@ -259,6 +270,8 @@ def pressure_limits(var_id: str, quantity: str) -> tuple[float, float]:
 def axis_title(var_id: str, quantity: str) -> str:
     if var_id == "jo2_rate":
         return "O₂ photolysis rate [molecules m⁻³ s⁻¹]"
+    if var_id == "jo2_int":
+        return "Integrated O₂ photolysis [molecules m⁻² s⁻¹]"
     if var_id == "U":
         return "Zonal wind [m s⁻¹]"
     if var_id == "V":
@@ -287,9 +300,9 @@ def subplot_spacing(rows: int) -> dict:
     return spacing
 
 
-def apply_profile_axes(fig, var_id: str, quantity: str) -> None:
+def apply_profile_axes(fig, var_id: str, quantity: str, planet: str = "earth") -> None:
     use_log = display_meta(var_id, quantity)["log"]
-    limits = x_limits(var_id, quantity)
+    limits = x_limits(var_id, quantity, planet)
     if limits is None:
         if use_log:
             fig.update_xaxes(type="log")
@@ -299,7 +312,7 @@ def apply_profile_axes(fig, var_id: str, quantity: str) -> None:
         fig.update_xaxes(type="log", range=[np.log10(low), np.log10(high)])
     else:
         fig.update_xaxes(range=[low, high])
-    surface, top = pressure_limits(var_id, quantity)
+    surface, top = pressure_limits(var_id, quantity, planet)
     fig.update_yaxes(type="log", range=[np.log10(surface), np.log10(top)])
 
 
@@ -343,7 +356,7 @@ def white_figure(fig) -> None:
     )
 
 
-def style_pressure_axis(fig, rows: int, cols: int, var_id: str, quantity: str) -> None:
+def style_pressure_axis(fig, rows: int, cols: int, var_id: str, quantity: str, planet: str = "earth") -> None:
     fig.update_layout(
         template="plotly_white",
         height=max(460, 300 * rows),
@@ -358,7 +371,7 @@ def style_pressure_axis(fig, rows: int, cols: int, var_id: str, quantity: str) -
         fig.update_xaxes(title_text=x_title, row=rows, col=col)
     for row in range(1, rows + 1):
         fig.update_yaxes(title_text="Pressure [hPa]", row=row, col=1)
-    apply_profile_axes(fig, var_id, quantity)
+    apply_profile_axes(fig, var_id, quantity, planet)
 
 
 def add_profile_line(fig, profile: dict, name: str, colour: str, use_log: bool, row: int, col: int, show_legend: bool) -> None:
@@ -413,7 +426,7 @@ def add_waccm_spread(fig, profile: dict, use_log: bool, row: int, col: int) -> N
     )
 
 
-def figure_compare(pals: list[str], models: list[str], sza: str, var_id: str, show_spread: bool, quantity: str) -> tuple[go.Figure | None, list[str]]:
+def figure_compare(pals: list[str], models: list[str], sza: str, var_id: str, show_spread: bool, quantity: str, planet: str = "earth") -> tuple[go.Figure | None, list[str]]:
     meta = display_meta(var_id, quantity)
     use_log = meta["log"]
     rows, cols = panel_shape(len(pals))
@@ -434,11 +447,18 @@ def figure_compare(pals: list[str], models: list[str], sza: str, var_id: str, sh
         for model in models:
             if not meta["compare"] and model != "WACCM6":
                 continue
-            stamp = data.source_stamp(model, pal, sza, var_id)
+            stamp = data.source_stamp(model, pal, sza, var_id, planet)
             if stamp.startswith("missing:"):
-                notes.append(f"{model} has no {data.pal_label(pal)} file at SZA {sza}°.")
+                if planet == "proxima" and model == "WACCM6":
+                    notes.append(
+                        f"WACCM6 has no condensed Proxima Centauri b chemistry file for {data.pal_label(pal)}."
+                    )
+                elif planet == "proxima":
+                    notes.append(f"{model} has no Proxima Centauri b {data.pal_label(pal)} file.")
+                else:
+                    notes.append(f"{model} has no {data.pal_label(pal)} file at SZA {sza}°.")
                 continue
-            profile = presented_profile(cached_profile(model, pal, sza, var_id, stamp), quantity)
+            profile = presented_profile(cached_profile(model, pal, sza, var_id, planet, stamp), quantity)
             if profile is None:
                 notes.append(f"{model} does not store {meta['label']} for {data.pal_label(pal)}.")
                 continue
@@ -457,7 +477,7 @@ def figure_compare(pals: list[str], models: list[str], sza: str, var_id: str, sh
             drawn += 1
     if drawn == 0:
         return None, notes
-    style_pressure_axis(fig, rows, cols, var_id, quantity)
+    style_pressure_axis(fig, rows, cols, var_id, quantity, planet)
     return fig, notes
 
 
@@ -528,11 +548,11 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
     for index, pal in enumerate(pals):
         row = index // cols + 1
         col = index % cols + 1
-        stamp = data.source_stamp("WACCM6", pal, sza, var_id)
+        stamp = data.source_stamp("WACCM6", pal, sza, var_id, "earth")
         if stamp.startswith("missing:"):
             notes.append(f"No WACCM6 file for {data.pal_label(pal)}.")
             continue
-        profile = presented_profile(cached_profile("WACCM6", pal, sza, var_id, stamp), quantity)
+        profile = presented_profile(cached_profile("WACCM6", pal, sza, var_id, "earth", stamp), quantity)
         if profile is None or profile.get("zonal") is None:
             notes.append(f"WACCM6 {data.pal_label(pal)} has no latitude–pressure field for {meta['label']}.")
             continue
@@ -973,7 +993,7 @@ def main() -> None:
         sza = "48.2"
         models = list(data.PROFILE_MODELS)
         show_spread = False
-        planet = "proxima"
+        planet = "earth"
         quantity = "mixing"
         if var_id in data.CHEMICAL_IDS and style in (STYLE_COMPARE, STYLE_MAP):
             quantity = st.radio(
@@ -984,10 +1004,27 @@ def main() -> None:
             )
         if style == STYLE_COMPARE:
             if meta["compare"]:
-                sza = st.selectbox("1D solar zenith angle", data.SZA_CHOICES, index=0)
-                models = st.multiselect(
-                    "Models", data.PROFILE_MODELS, default=data.PROFILE_MODELS
+                planet = st.radio(
+                    "Planet",
+                    ["earth", "proxima"],
+                    format_func=planet_name,
+                    horizontal=True,
                 )
+                if planet == "earth":
+                    sza = st.selectbox("1D solar zenith angle", data.SZA_CHOICES, index=0)
+                    models = st.multiselect(
+                        "Models",
+                        data.PROFILE_MODELS,
+                        default=data.PROFILE_MODELS,
+                        key="compare_models_earth",
+                    )
+                else:
+                    models = st.multiselect(
+                        "Models",
+                        data.PROXIMA_MODELS,
+                        default=data.PROXIMA_MODELS,
+                        key="compare_models_proxima",
+                    )
             show_spread = st.checkbox("WACCM6 range across latitude", value=True)
         elif style == STYLE_SPECTRUM:
             planet = st.radio(
@@ -1024,9 +1061,10 @@ def main() -> None:
         figure, notes = figure_spectra(planet, pals)
         if planet == "earth":
             st.caption(
-                "Earth spectra use the same two panels as Proxima Centauri b, out to 20 µm. "
-                "VULCAN has 150% PAL and no 100% PAL Earth spectrum. "
-                "This set has no Earth WACCM6 transmission spectrum."
+                "Earth spectra are the updated 60° PSG runs for WACCM6, Atmos, Photochem, "
+                "VULCAN, and Kasting at 100%, 10%, 1%, and 0.1% PAL. "
+                "The 150% PAL panel is the earlier VULCAN spectrum. "
+                "The infrared panel goes out to 20 µm."
             )
         else:
             st.caption(
@@ -1046,8 +1084,8 @@ def main() -> None:
         if not models:
             st.info("Choose at least one model.")
             return
-        figure, notes = figure_compare(pals, models, sza, var_id, show_spread, quantity)
-        st.caption(profile_caption(var_id, sza, quantity))
+        figure, notes = figure_compare(pals, models, sza, var_id, show_spread, quantity, planet)
+        st.caption(profile_caption(var_id, sza, quantity, planet))
     elif style == STYLE_MAP:
         shown = display_meta(var_id, quantity)
         figure, notes = figure_maps(pals, sza, var_id, quantity)
@@ -1101,6 +1139,22 @@ def main() -> None:
             2 J(O₂) n(O₂) × 3/8, with J taken from the total O₂ branch
             (`J_sp` branch 0) and n from the saved number density.
 
+            Integrated O₂ photolysis is the column above each level, in
+            molecules m⁻² s⁻¹, using the same integrals as Early_Earth.py.
+            WACCM6 sums 2 J(O₂) times the O₂ column in each hybrid layer from
+            the top downward, with g = 9.81. Photochem multiplies the local
+            rate by 1000 m. Atmos and Kasting integrate along the saved
+            altitude. VULCAN uses the saved layer thickness.
+
+            Proxima Centauri b comparisons use the same four codes as the
+            Early_Earth.py Proxima figures: Atmos in
+            `Atmos/Proxima_Centauri`, Photochem in
+            `Photochem/Proxima_Centauri`, and the VULCAN WBC temperature-profile
+            runs (`PCb_*1e12s*WBC_WPT`). Those 1D cases are at 48.2°.
+            Kasting has no Proxima case. WACCM6 Proxima chemistry appears when
+            a zonal-mean file is in `WACCM6/proxima`. The transmission spectra
+            are a separate set of files.
+
             Zonal wind, meridional wind, cloud liquid, and cloud ice are shown
             as WACCM6 zonal means: longitude is averaged, and the plot is
             latitude against pressure.
@@ -1115,24 +1169,27 @@ def main() -> None:
         )
 
 
-def profile_caption(var_id: str, sza: str, quantity: str) -> str:
+def profile_caption(var_id: str, sza: str, quantity: str, planet: str = "earth") -> str:
     meta = display_meta(var_id, quantity)
-    text = f"{axis_title(var_id, quantity)} at a 1D solar zenith angle of {sza}°."
+    if planet == "proxima":
+        text = f"Proxima Centauri b {axis_title(var_id, quantity)}. The 1D cases are at 48.2°."
+    else:
+        text = f"{axis_title(var_id, quantity)} at a 1D solar zenith angle of {sza}°."
     if not meta["compare"]:
         text += " U, V, cloud liquid, and cloud ice are WACCM6 fields."
-    extra = family_caption(var_id, quantity)
+    extra = family_caption(var_id, quantity, planet)
     if extra:
         text += " " + extra
     return text
 
 
-def family_caption(var_id: str, quantity: str = "mixing") -> str:
+def family_caption(var_id: str, quantity: str = "mixing", planet: str = "earth") -> str:
     parts = []
     if var_id == "NOX":
         parts.append("NOₓ is N + NO + NO₂.")
     elif var_id == "HOX":
         parts.append("HOₓ is H + OH + HO₂ + 2 H₂O₂.")
-    elif var_id.startswith("jo"):
+    elif var_id.startswith("jo") and var_id not in ("jo2_rate", "jo2_int"):
         parts.append("J is the photolysis frequency in s⁻¹.")
     if var_id == "jo2_rate":
         parts.append(
@@ -1140,6 +1197,13 @@ def family_caption(var_id: str, quantity: str = "mixing") -> str:
             "VULCAN uses 2 J(O₂ branch 0) n(O₂) × 3/8. "
             "Photochem is the odd-oxygen production from the two O₂ + hv branches, "
             "computed on the saved atmosphere."
+        )
+        if planet == "proxima":
+            parts.append("The axis runs from 10¹⁰ to 5×10¹², and pressure from 1000 to 10⁻⁵ hPa.")
+    if var_id == "jo2_int":
+        parts.append(
+            "The column is integrated from the top of the atmosphere, in molecules m⁻² s⁻¹. "
+            "The axis runs from 5×10¹⁵ to 2×10¹⁷, and pressure from 1000 to 10⁻⁵ hPa."
         )
     if quantity == "mixing" and var_id in data.CHEMICAL_IDS:
         if var_id == "OH":
@@ -1152,6 +1216,8 @@ def family_caption(var_id: str, quantity: str = "mixing") -> str:
             parts.append("The axis runs from 10⁻⁷ to 10⁻⁴, and pressure from 1000 to 0.001 hPa.")
         elif var_id == "O":
             parts.append("This axis extends below 10⁻⁹.")
+        elif var_id == "O3" and planet == "proxima":
+            parts.append("The axis runs from 10⁻¹⁰ to 10⁻⁴, and pressure from 1000 to 10⁻⁵ hPa.")
         elif var_id == "O3":
             parts.append("The axis runs from 10⁻⁹ to 10⁻⁴.")
         else:

@@ -32,20 +32,23 @@ def condense_vulcan(path: Path, dest: Path) -> None:
         names.append(str(key[0]))
         branches.append(int(key[1]))
         rates.append(np.asarray(rate, dtype=np.float64))
+    payload = {
+        "species": species,
+        "ymix": np.asarray(variable["ymix"], dtype=np.float64),
+        "y": np.asarray(variable["y"], dtype=np.float64),
+        "pco": np.asarray(atmosphere["pco"], dtype=np.float64),
+        "Tco": np.asarray(atmosphere["Tco"], dtype=np.float64),
+        "t": np.asarray(variable["t"], dtype=np.float64),
+        "j_species": np.array(names),
+        "j_branch": np.asarray(branches, dtype=np.int32),
+        "j_rate": np.vstack(rates),
+        "source": np.array(path.name),
+    }
+    if "dz" in atmosphere:
+        # VULCAN stores layer thickness in cm. Early_Earth.py divides by 100 to get metres.
+        payload["dz_m"] = np.asarray(atmosphere["dz"], dtype=np.float64) / 100.0
     dest.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        dest,
-        species=species,
-        ymix=np.asarray(variable["ymix"], dtype=np.float64),
-        y=np.asarray(variable["y"], dtype=np.float64),
-        pco=np.asarray(atmosphere["pco"], dtype=np.float64),
-        Tco=np.asarray(atmosphere["Tco"], dtype=np.float64),
-        t=np.asarray(variable["t"], dtype=np.float64),
-        j_species=np.array(names),
-        j_branch=np.asarray(branches, dtype=np.int32),
-        j_rate=np.vstack(rates),
-        source=np.array(path.name),
-    )
+    np.savez_compressed(dest, **payload)
 
 
 def earth_lbc_wpt_files(source_dir: Path) -> list[Path]:
