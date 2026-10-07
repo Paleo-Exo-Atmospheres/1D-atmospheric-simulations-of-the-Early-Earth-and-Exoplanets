@@ -134,8 +134,8 @@ st.markdown(
 
 
 @st.cache_data(show_spinner="Reading model output…")
-def cached_profile(model: str, pal: str, sza: str, var_id: str, planet: str, _stamp: str) -> dict | None:
-    del _stamp
+def cached_profile(model: str, pal: str, sza: str, var_id: str, planet: str, stamp: str) -> dict | None:
+    del stamp
     profile = data.load_profile(model, pal, sza, var_id, planet)
     if profile is None:
         return None
@@ -156,8 +156,24 @@ def cached_profile(model: str, pal: str, sza: str, var_id: str, planet: str, _st
     return packed
 
 
+def ozone_curve_stamp() -> str:
+    """Changes when a curve input file is added or replaced.
+
+    Streamlit keeps the ozone curve until this string changes, so a new
+    Atmos run is included on the next refresh.
+    """
+    pieces = []
+    for pal in data.CURVE_PALS:
+        pieces.append(data.source_stamp("WACCM6", pal, "48.2", "O3"))
+        for sza in ("45", "48.2", "60"):
+            for model in ("Atmos", "Photochem", "Kasting", "VULCAN NCHO", "VULCAN SNCHOAr"):
+                pieces.append(data.source_stamp(model, pal, sza, "O3"))
+    return "\n".join(pieces)
+
+
 @st.cache_data(show_spinner="Calculating ozone columns…")
-def cached_ozone_curve() -> dict:
+def cached_ozone_curve(stamp: str) -> dict:
+    del stamp
     return data.ozone_oxygen_curve()
 
 
@@ -212,8 +228,6 @@ MIXING_X = {
     "jo3": (1e-12, 1e-2),
     "jo3_a": (1e-12, 1e-2),
     "jo3_b": (1e-12, 1e-2),
-    "CLDLIQ": (1e-8, 1e-3),
-    "CLDICE": (1e-8, 1e-3),
 }
 DENSITY_X = {
     "O3": (5e16, 6e18),
@@ -230,6 +244,8 @@ LINEAR_X = {
     "T": (145.0, 300.0),
     "U": (-60.0, 60.0),
     "V": (-10.0, 10.0),
+    "CLDLIQ": (0.0, 8e-5),
+    "CLDICE": (0.0, 5e-6),
 }
 ZONAL_FIELDS = ("U", "V", "CLDLIQ", "CLDICE")
 
@@ -511,23 +527,28 @@ def attach_colorbars(fig) -> None:
         if xdomain is None or ydomain is None:
             continue
         title = ""
-        if trace.colorbar is not None and trace.colorbar.title is not None:
-            title = trace.colorbar.title.text or ""
-        trace.update(
-            showscale=True,
-            colorbar=dict(
-                title=dict(text=title, side="right", font=dict(size=12, color="black")),
-                x=xdomain[1] + 0.012,
-                xref="paper",
-                y=(ydomain[0] + ydomain[1]) / 2.0,
-                yref="paper",
-                len=max((ydomain[1] - ydomain[0]) * 0.86, 0.12),
-                lenmode="fraction",
-                thickness=14,
-                outlinewidth=0,
-                tickfont=dict(size=11, color="black"),
-            ),
+        kept = {}
+        if trace.colorbar is not None:
+            if trace.colorbar.title is not None:
+                title = trace.colorbar.title.text or ""
+            for key in ("tickformat", "tickmode", "tickvals", "ticktext"):
+                value = getattr(trace.colorbar, key, None)
+                if value is not None:
+                    kept[key] = value
+        colourbar = dict(
+            title=dict(text=title, side="right", font=dict(size=12, color="black")),
+            x=xdomain[1] + 0.012,
+            xref="paper",
+            y=(ydomain[0] + ydomain[1]) / 2.0,
+            yref="paper",
+            len=max((ydomain[1] - ydomain[0]) * 0.86, 0.12),
+            lenmode="fraction",
+            thickness=14,
+            outlinewidth=0,
+            tickfont=dict(size=11, color="black"),
         )
+        colourbar.update(kept)
+        trace.update(showscale=True, colorbar=colourbar)
 
 
 def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[go.Figure | None, list[str]]:
@@ -569,6 +590,9 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
             colour_title = axis_title(var_id, quantity)
             zmin = None if limits is None else limits[0]
             zmax = None if limits is None else limits[1]
+        colourbar = dict(title=dict(text=colour_title))
+        if var_id in ("CLDLIQ", "CLDICE"):
+            colourbar["tickformat"] = ".1e"
         pressure = profile.get("zonal_pressure_hpa")
         if pressure is None:
             y_pressure = profile["pressure_hpa"]
@@ -582,7 +606,7 @@ def figure_maps(pals: list[str], sza: str, var_id: str, quantity: str) -> tuple[
             y=y_pressure,
             z=plot_z,
             colorscale=colours,
-            colorbar=dict(title=dict(text=colour_title)),
+            colorbar=colourbar,
             line=dict(width=0),
             contours=dict(coloring="fill"),
             showscale=True,
@@ -689,13 +713,19 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
         **spacing,
     )
     center_row_titles(fig, n_pal)
+    spectrum_order = list(data.MODEL_ORDER) + ["VULCAN SNCHOAr"]
+    legend_shown = set()
     for row, (_pal, series) in enumerate(available, start=1):
-        for model in data.MODEL_ORDER:
+        for model in spectrum_order:
             if model not in series:
                 continue
             wavelength, altitude = series[model]
+            show = model not in legend_shown
             for col, (xmin, xmax) in enumerate(panels, start=1):
                 mask = (wavelength >= xmin) & (wavelength <= xmax)
+                line = dict(color=COLOURS[model], width=2.2)
+                if model == "VULCAN SNCHOAr":
+                    line = dict(color="#be185d", width=2.4, dash="dash")
                 fig.add_trace(
                     go.Scatter(
                         x=wavelength[mask],
@@ -703,12 +733,13 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
                         mode="lines",
                         name=model,
                         legendgroup=model,
-                        showlegend=(row == 1 and col == 1),
-                        line=dict(color=COLOURS[model], width=2.2),
+                        showlegend=show and col == 1,
+                        line=line,
                     ),
                     row=row,
                     col=col,
                 )
+            legend_shown.add(model)
         for col, (xmin, xmax) in enumerate(panels, start=1):
             add_bands(fig, row, col, xmin, xmax, ymax)
             fig.update_xaxes(range=[xmin, xmax], title_text="Wavelength [µm]", row=row, col=col)
@@ -1042,7 +1073,7 @@ def main() -> None:
         return
 
     if style == STYLE_OZONE:
-        curve = cached_ozone_curve()
+        curve = cached_ozone_curve(ozone_curve_stamp())
         figure = figure_ozone_column(curve)
         notes = curve["notes"]
         st.caption(
@@ -1069,6 +1100,8 @@ def main() -> None:
         else:
             st.caption(
                 "Proxima Centauri b spectra for 100%, 10%, 1%, and 0.1% PAL. "
+                "The 100%, 10%, and 1% PAL panels add the VULCAN sulfur network as a dashed pink line. "
+                "The 0.1% PAL sulfur run is not shown: that file still has 100% PAL oxygen. "
                 "The paper figure is the 1% PAL case. Shading marks O₃ and O₂ bands."
             )
     elif var_id in ZONAL_FIELDS:
@@ -1079,6 +1112,7 @@ def main() -> None:
         st.caption(
             f"WACCM6 zonal mean of {shown['label']}. "
             f"Longitude is averaged. {span}"
+            + (" The colour scale is linear, in kg kg⁻¹." if cloud else "")
         )
     elif style == STYLE_COMPARE:
         if not models:

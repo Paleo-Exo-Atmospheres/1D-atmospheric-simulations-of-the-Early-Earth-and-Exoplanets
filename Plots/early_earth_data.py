@@ -198,14 +198,14 @@ VARIABLES = {
     "CLDLIQ": {
         "label": "Cloud liquid",
         "units": "kg kg⁻¹",
-        "log": True,
+        "log": False,
         "compare": False,
         "kind": "cloud",
     },
     "CLDICE": {
         "label": "Cloud ice",
         "units": "kg kg⁻¹",
-        "log": True,
+        "log": False,
         "compare": False,
         "kind": "cloud",
     },
@@ -269,18 +269,21 @@ PCB_SPECTRA = {
         "Atmos": "PTZ_mixingratios_out_psg_output_100pc.txt",
         "WACCM6": "b.e21.BWma1850.f19_g17.PC_b.SSPO.016.cam.h0.0320-0320_psg_output.txt",
         "VULCAN": "PCb_100pc_o2_482SZA_high_g_psg_output.txt",
+        "VULCAN SNCHOAr": "PCb_100pc_o2_482SZA_high_g_PT_SNCHOAr_psg_output.txt",
     },
     "10": {
         "Photochem": "Proxima_10pc_48.2_psg_output.txt",
         "Atmos": "PTZ_mixingratios_out_psg_output_10pc.txt",
         "WACCM6": "b.e21.BWma1850.f19_g17.PC_b.10pc_o2.001.cam.h0.0328_psg_output.txt",
         "VULCAN": "PCb_10pc_o2_482SZA_high_g_psg_output.txt",
+        "VULCAN SNCHOAr": "PCb_10pc_o2_482SZA_high_g_PT_SNCHOAr_psg_output.txt",
     },
     "1": {
         "Photochem": "Proxima_1pc_48.2_psg_output.txt",
         "Atmos": "PTZ_mixingratios_out_psg_output_1pc.txt",
         "WACCM6": "b.e21.BWma1850.f19_g17.PC_b.1pc_o2.002.cam.h0.0338_psg_output.txt",
         "VULCAN": "PCb_1pc_o2_482SZA_high_g_psg_output.txt",
+        "VULCAN SNCHOAr": "PCb_1pc_o2_482SZA_high_g_PT_SNCHOAr_psg_output.txt",
     },
     "0.1": {
         "Photochem": "Proxima_0.1pc_48.2_psg_output.txt",
