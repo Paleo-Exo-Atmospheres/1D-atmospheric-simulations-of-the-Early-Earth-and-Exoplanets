@@ -216,11 +216,11 @@ PREFERRED_WACCM = {
     "150": "Earth_150pc_o2.cam.h0.0034-0037.nc",
     "100": "Earth_100pc_o2.cam.h0.0009-0012.nc",
     "50": "Earth_50pc_o2.cam.h0.0040-0043.nc",
-    "10": "Earth_10pc_o2_ubc.cam.h0.0036.nc",
-    "5": "Earth_5pc_o2_ubc.cam.h0.0047.nc",
-    "1": "Earth_1pc_o2_ubc.cam.h0.0044.nc",
-    "0.5": "Earth_0.5pc_o2_ubc.cam.h0.0056.nc",
-    "0.1": "Earth_0.1pc_o2_ubc.cam.h0.0045.nc",
+    "10": "Earth_10pc_o2_ubc.cam.h0.0039-0042.nc",
+    "5": "Earth_5pc_o2_ubc.cam.h0.0051-0054.nc",
+    "1": "Earth_1pc_o2_ubc.cam.h0.0047-0050.nc",
+    "0.5": "Earth_0.5pc_o2_ubc.cam.h0.0057-0060.nc",
+    "0.1": "Earth_0.1pc_o2_ubc.cam.h0.0045-0048.nc",
 }
 
 WACCM_TOKEN = {pal: f"Earth_{pal}pc_o2" for pal in PAL_ORDER}

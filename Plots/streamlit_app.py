@@ -725,7 +725,7 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
                 mask = (wavelength >= xmin) & (wavelength <= xmax)
                 line = dict(color=COLOURS[model], width=2.2)
                 if model == "VULCAN SNCHOAr":
-                    line = dict(color="#be185d", width=2.4, dash="dash")
+                    line = dict(color=COLOURS["VULCAN SNCHOAr"], width=2.6, dash="dash")
                 fig.add_trace(
                     go.Scatter(
                         x=wavelength[mask],
