@@ -29,7 +29,7 @@ files=(
   "Earth_5pc_o2_ubc.cam.h0.0047.nc|5pc"
   "Earth_1pc_o2_ubc.cam.h0.0044.nc|1pc"
   "Earth_0.5pc_o2_ubc.cam.h0.0056.nc|0.5pc"
-  "Earth_0.1pc_o2_ubc.cam.h0.0045.nc|0.1pc"
+  "Earth_0.1pc_o2_ubc.cam.h0.0046-0049.nc|0.1pc"
 )
 
 for item in "${files[@]}"; do

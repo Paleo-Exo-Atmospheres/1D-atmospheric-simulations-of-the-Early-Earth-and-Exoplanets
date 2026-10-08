@@ -221,7 +221,7 @@ PREFERRED_WACCM = {
     "5": "Earth_5pc_o2_ubc.cam.h0.0051-0054.nc",
     "1": "Earth_1pc_o2_ubc.cam.h0.0047-0050.nc",
     "0.5": "Earth_0.5pc_o2_ubc.cam.h0.0057-0060.nc",
-    "0.1": "Earth_0.1pc_o2_ubc.cam.h0.0045-0048.nc",
+    "0.1": "Earth_0.1pc_o2_ubc.cam.h0.0046-0049.nc",
 }
 
 WACCM_TOKEN = {pal: f"Earth_{pal}pc_o2" for pal in PAL_ORDER}
