@@ -1022,6 +1022,22 @@ def main() -> None:
             "Plot style",
             [STYLE_COMPARE, STYLE_OZONE, STYLE_MAP, STYLE_SPECTRUM],
         )
+        planet = "earth"
+        if style == STYLE_SPECTRUM:
+            planet = st.radio(
+                "Planet",
+                ["proxima", "earth"],
+                format_func=planet_name,
+                key="spectrum_planet",
+            )
+        elif style == STYLE_COMPARE:
+            planet = st.radio(
+                "Planet",
+                ["earth", "proxima"],
+                format_func=planet_name,
+                horizontal=True,
+                key="compare_planet",
+            )
         variable_labels = {key: data.VARIABLES[key]["label"] for key in data.VARIABLES}
         if style == STYLE_OZONE:
             var_id = "O3"
@@ -1033,17 +1049,26 @@ def main() -> None:
                 format_func=lambda key: variable_labels[key],
                 index=0,
             )
+            if planet == "proxima" and style == STYLE_COMPARE:
+                oxygen_choices = data.PROXIMA_WACCM_PALS
+                oxygen_default = list(data.PROXIMA_WACCM_PALS)
+            elif planet == "proxima":
+                oxygen_choices = data.PROXIMA_PALS
+                oxygen_default = list(data.PROXIMA_PALS)
+            else:
+                oxygen_choices = data.PAL_ORDER
+                oxygen_default = list(data.STANDARD_PALS)
             pals = st.multiselect(
                 "Oxygen",
-                data.PAL_ORDER,
-                default=data.STANDARD_PALS,
+                oxygen_choices,
+                default=oxygen_default,
                 format_func=data.pal_label,
+                key=f"oxygen_{style}_{planet}",
             )
         meta = data.VARIABLES[var_id]
         sza = "48.2"
         models = list(data.PROFILE_MODELS)
         show_spread = False
-        planet = "earth"
         quantity = "mixing"
         if var_id in data.CHEMICAL_IDS and style in (STYLE_COMPARE, STYLE_MAP):
             quantity = st.radio(
@@ -1053,39 +1078,28 @@ def main() -> None:
                 horizontal=True,
             )
         if style == STYLE_COMPARE:
-            if meta["compare"]:
-                planet = st.radio(
-                    "Planet",
-                    ["earth", "proxima"],
-                    format_func=planet_name,
-                    horizontal=True,
+            if planet == "earth" and meta["compare"]:
+                sza = st.selectbox("1D solar zenith angle", data.SZA_CHOICES, index=0)
+                models = st.multiselect(
+                    "Models",
+                    data.PROFILE_MODELS,
+                    default=data.PROFILE_MODELS,
+                    key="compare_models_earth",
                 )
-                if planet == "earth":
-                    sza = st.selectbox("1D solar zenith angle", data.SZA_CHOICES, index=0)
-                    models = st.multiselect(
-                        "Models",
-                        data.PROFILE_MODELS,
-                        default=data.PROFILE_MODELS,
-                        key="compare_models_earth",
-                    )
-                else:
-                    models = st.multiselect(
-                        "Models",
-                        data.PROXIMA_MODELS,
-                        default=data.PROXIMA_MODELS,
-                        key="compare_models_proxima",
-                    )
+            elif planet == "proxima":
+                models = ["WACCM6"]
             show_spread = st.checkbox("WACCM6 range across latitude", value=True)
-        elif style == STYLE_SPECTRUM:
-            planet = st.radio(
-                "Planet",
-                ["proxima", "earth"],
-                format_func=planet_name,
+        if planet == "proxima" and style == STYLE_COMPARE:
+            st.caption(
+                "Proxima Centauri b chemistry is the WACCM6 zonal mean at 100% and 1% PAL."
             )
-        st.caption(
-            "WACCM6 curves use the zonal-mean files in WACCM6. "
-            "10% to 0.1% PAL use the corrected upper-boundary runs."
-        )
+        elif planet == "proxima":
+            st.caption("Proxima Centauri b transmission spectra use the saved PSG files.")
+        else:
+            st.caption(
+                "WACCM6 curves use the zonal-mean files in WACCM6. "
+                "10% to 0.1% PAL use the corrected upper-boundary runs."
+            )
 
     if not pals:
         st.info("Choose at least one oxygen level.")
@@ -1126,7 +1140,7 @@ def main() -> None:
                 "The 0.1% PAL sulfur run is not shown: that file still has 100% PAL oxygen. "
                 "The paper figure is the 1% PAL case. Shading marks O₃ and O₂ bands."
             )
-    elif var_id in ZONAL_FIELDS:
+    elif var_id in ZONAL_FIELDS and planet != "proxima":
         shown = display_meta(var_id, quantity)
         figure, notes = figure_maps(pals, sza, var_id, quantity)
         cloud = var_id in ("CLDLIQ", "CLDICE")
@@ -1202,14 +1216,10 @@ def main() -> None:
             rate by 1000 m. Atmos and Kasting integrate along the saved
             altitude. VULCAN uses the saved layer thickness.
 
-            Proxima Centauri b comparisons use the same four codes as the
-            Early_Earth.py Proxima figures: Atmos in
-            `Atmos/Proxima_Centauri`, Photochem in
-            `Photochem/Proxima_Centauri`, and the VULCAN WBC temperature-profile
-            runs (`PCb_*1e12s*WBC_WPT`). Those 1D cases are at 48.2°.
-            Kasting has no Proxima case. WACCM6 Proxima chemistry appears when
-            a zonal-mean file is in `WACCM6/proxima`. The transmission spectra
-            are a separate set of files.
+            Proxima Centauri b chemistry in the comparison plot is the WACCM6
+            zonal mean at 100% and 1% PAL, from the condensed files in
+            `WACCM6/proxima`. Transmission spectra are separate and include
+            WACCM6, Atmos, Photochem, and both VULCAN networks.
 
             Zonal wind, meridional wind, cloud liquid, and cloud ice are shown
             as WACCM6 zonal means: longitude is averaged, and the plot is
@@ -1228,7 +1238,10 @@ def main() -> None:
 def profile_caption(var_id: str, sza: str, quantity: str, planet: str = "earth") -> str:
     meta = display_meta(var_id, quantity)
     if planet == "proxima":
-        text = f"Proxima Centauri b {axis_title(var_id, quantity)}. The 1D cases are at 48.2°."
+        text = (
+            f"Proxima Centauri b WACCM6 {axis_title(var_id, quantity)} "
+            "at 100% and 1% PAL."
+        )
     else:
         text = f"{axis_title(var_id, quantity)} at a 1D solar zenith angle of {sza}°."
     if not meta["compare"]:

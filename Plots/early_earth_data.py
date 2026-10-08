@@ -36,10 +36,11 @@ PROFILE_MODELS = [
     "VULCAN SNCHOAr",
     "Kasting",
 ]
-# Proxima Centauri b chemistry comparisons use one VULCAN network.
-# Kasting has no Proxima case in this archive.
-PROXIMA_MODELS = ["WACCM6", "Atmos", "Photochem", "VULCAN"]
+# Proxima Centauri b chemistry in the app is the two condensed WACCM6 files.
+# Transmission spectra still use the saved 100%, 10%, 1%, and 0.1% PAL runs.
+PROXIMA_MODELS = ["WACCM6"]
 PROXIMA_PALS = ["100", "10", "1", "0.1"]
+PROXIMA_WACCM_PALS = ["100", "1"]
 
 # WACCM6 family definitions, used for every model so the curves are the same quantity.
 # NOX long_name: "nox (N+NO+NO2)"
