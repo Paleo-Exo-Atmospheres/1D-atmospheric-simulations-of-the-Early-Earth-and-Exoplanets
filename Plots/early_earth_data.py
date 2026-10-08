@@ -698,7 +698,7 @@ def _read_vulcan_chemical(path: Path) -> dict:
 
 # Files used for the Proxima Centauri b chemistry plots in Early_Earth.py.
 PCB_VULCAN = {
-    "100": "PCb_1e12s_482SZA_WBC_WPT_1rtol",
+    "100": "PCb_100pc_o2_482SZA_high_g_PT_SNCHOAr",
     "50": "PCb_50pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
     "10": "PCb_10pc_o2_1e12s_482SZA_WBC_WPT_1rtol",
     "5": "PCb_5pc_o2_1e12s_482SZA_WBC_WPT_1rtol",

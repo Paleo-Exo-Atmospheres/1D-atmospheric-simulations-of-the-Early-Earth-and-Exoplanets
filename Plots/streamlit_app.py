@@ -29,9 +29,22 @@ COLOURS = {
     "Photochem": "#1d4ed8",
     "VULCAN": "#6b21a8",
     "VULCAN NCHO": "#6b21a8",
-    "VULCAN SNCHOAr": "#f9a8d4",
+    "VULCAN SNCHOAr": "magenta",
     "Kasting": "#0f766e",
 }
+
+# Transmission spectra match the paper figures: solid lines, matplotlib colours.
+# A single VULCAN curve is magenta. When both networks are drawn, the network
+# without sulfur is dark purple and the sulfur network stays magenta.
+SPECTRUM_COLOURS = {
+    "WACCM6": "black",
+    "Atmos": "darkorange",
+    "Photochem": "blue",
+    "VULCAN": "magenta",
+    "VULCAN SNCHOAr": "magenta",
+    "Kasting": "teal",
+}
+SPECTRUM_NO_S = "#6b21a8"
 
 PAL_COLOURS = {
     "150": "#7f1d1d",
@@ -714,6 +727,11 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
     )
     center_row_titles(fig, n_pal)
     spectrum_order = list(data.MODEL_ORDER) + ["VULCAN SNCHOAr"]
+    has_sulfur = any("VULCAN SNCHOAr" in series for _pal, series in available)
+    spectrum_names = {}
+    if has_sulfur:
+        spectrum_names["VULCAN"] = "VULCAN no S"
+        spectrum_names["VULCAN SNCHOAr"] = "VULCAN S"
     legend_shown = set()
     for row, (_pal, series) in enumerate(available, start=1):
         for model in spectrum_order:
@@ -723,15 +741,16 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
             show = model not in legend_shown
             for col, (xmin, xmax) in enumerate(panels, start=1):
                 mask = (wavelength >= xmin) & (wavelength <= xmax)
-                line = dict(color=COLOURS[model], width=2.2)
-                if model == "VULCAN SNCHOAr":
-                    line = dict(color=COLOURS["VULCAN SNCHOAr"], width=2.6, dash="dash")
+                colour = SPECTRUM_COLOURS[model]
+                if has_sulfur and model == "VULCAN":
+                    colour = SPECTRUM_NO_S
+                line = dict(color=colour, width=2, dash="solid")
                 fig.add_trace(
                     go.Scatter(
                         x=wavelength[mask],
                         y=altitude[mask],
                         mode="lines",
-                        name=model,
+                        name=spectrum_names.get(model, model),
                         legendgroup=model,
                         showlegend=show and col == 1,
                         line=line,
@@ -865,7 +884,7 @@ def figure_ozone_column(curve: dict) -> go.Figure:
         "Photochem range": "#0000ff",
         "Atmos range": "#ff8c00",
         "VULCAN NCHO": "#6b21a8",
-        "VULCAN SNCHOAr": "#f9a8d4",
+        "VULCAN SNCHOAr": "magenta",
     }
     fig = make_subplots(
         rows=3,
@@ -1094,13 +1113,16 @@ def main() -> None:
             st.caption(
                 "Earth spectra are the updated 60° PSG runs for WACCM6, Atmos, Photochem, "
                 "VULCAN, and Kasting at 100%, 10%, 1%, and 0.1% PAL. "
+                "Lines match the paper: solid black WACCM6, blue Photochem, "
+                "dark orange Atmos, teal Kasting, and magenta VULCAN. "
                 "The 150% PAL panel is the earlier VULCAN spectrum. "
                 "The infrared panel goes out to 20 µm."
             )
         else:
             st.caption(
                 "Proxima Centauri b spectra for 100%, 10%, 1%, and 0.1% PAL. "
-                "The 100%, 10%, and 1% PAL panels add the VULCAN sulfur network as a dashed pink line. "
+                "Lines match the paper: solid black WACCM6, blue Photochem, dark orange Atmos, "
+                "dark purple VULCAN no S, and magenta VULCAN S. "
                 "The 0.1% PAL sulfur run is not shown: that file still has 100% PAL oxygen. "
                 "The paper figure is the 1% PAL case. Shading marks O₃ and O₂ bands."
             )
