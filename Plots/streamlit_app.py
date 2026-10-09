@@ -775,11 +775,14 @@ def figure_spectra(planet: str, pals: list[str]) -> tuple[go.Figure | None, list
     return fig, notes
 
 
-def fill_rgba(hex_colour: str, alpha: float) -> str:
-    colour = hex_colour.lstrip("#")
-    red = int(colour[0:2], 16)
-    green = int(colour[2:4], 16)
-    blue = int(colour[4:6], 16)
+def fill_rgba(colour, alpha):
+    # Remove leading '#' if present
+    hex_code = colour.lstrip('#')
+    
+    red = int(hex_code[0:2], 16)
+    green = int(hex_code[2:4], 16)
+    blue = int(hex_code[4:6], 16)
+    
     return f"rgba({red}, {green}, {blue}, {alpha})"
 
 
@@ -878,12 +881,12 @@ def figure_ozone_column(curve: dict) -> go.Figure:
     """Paper O2–O3 figure: overview on top, then one panel for each 1D model."""
     # Same colours as the paper panels. VULCAN stays the two networks.
     ozone_colours = {
-        "WACCM6": "000000",
-        "Total 1D model range": "00bcd4",
-        "Kasting 1D range": "008080",
-        "Photochem range": "0000ff",
-        "Atmos range": "ff8c00",
-        "VULCAN NCHO": "6b21a8",
+        "WACCM6": "#000000",
+        "Total 1D model range": "#00bcd4",
+        "Kasting 1D range": "#008080",
+        "Photochem range": "#0000ff",
+        "Atmos range": "#ff8c00",
+        "VULCAN NCHO": "#6b21a8",
         "VULCAN SNCHOAr": "magenta",
     }
     fig = make_subplots(
