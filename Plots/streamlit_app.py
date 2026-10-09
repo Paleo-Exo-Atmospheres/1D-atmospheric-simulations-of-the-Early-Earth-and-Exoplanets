@@ -887,7 +887,7 @@ def figure_ozone_column(curve: dict) -> go.Figure:
         "Photochem range": "#0000ff",
         "Atmos range": "#ff8c00",
         "VULCAN NCHO": "#6b21a8",
-        "VULCAN SNCHOAr": "magenta",
+        "VULCAN SNCHOAr": "#ff00ff",
     }
     fig = make_subplots(
         rows=3,
