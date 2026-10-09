@@ -878,12 +878,12 @@ def figure_ozone_column(curve: dict) -> go.Figure:
     """Paper O2–O3 figure: overview on top, then one panel for each 1D model."""
     # Same colours as the paper panels. VULCAN stays the two networks.
     ozone_colours = {
-        "WACCM6": "#000000",
-        "Total 1D model range": "#00bcd4",
-        "Kasting 1D range": "#008080",
-        "Photochem range": "#0000ff",
-        "Atmos range": "#ff8c00",
-        "VULCAN NCHO": "#6b21a8",
+        "WACCM6": "000000",
+        "Total 1D model range": "00bcd4",
+        "Kasting 1D range": "008080",
+        "Photochem range": "0000ff",
+        "Atmos range": "ff8c00",
+        "VULCAN NCHO": "6b21a8",
         "VULCAN SNCHOAr": "magenta",
     }
     fig = make_subplots(
