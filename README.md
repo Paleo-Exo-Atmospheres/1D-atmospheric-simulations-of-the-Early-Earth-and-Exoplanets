@@ -5,7 +5,7 @@
 
 ## Overview
 
-This repository accompanies the paper **"Simulations of the Evolving Ozone Layer: Implications for the Early Earth, Exoplanets, and the Search for Life"** It contains the simulation data, model configuration files, and analysis scripts used to study how Earth's atmosphere — and in particular its ozone (O₃) layer — responds to changing atmospheric oxygen levels from the **Proterozoic through the Phanerozoic to the present day**. This Github repo is accompanied by a web app, where our simulations can be explored interactively: https://atmospheric-simulations-of-the-early-earth-and-exoplanets.streamlit.app/
+This repository accompanies the paper **"Simulations of the Evolving Ozone Layer: Implications for the Early Earth, Exoplanets, and the Search for Life"** It contains the simulation data, model configuration files, and analysis scripts used to study how Earth's atmosphere — and in particular its ozone (O₃) layer — responds to changing atmospheric oxygen levels from the **Proterozoic through the Phanerozoic to the present day**. This repository is accompanied by a web app, where our simulations can be explored interactively: https://atmospheric-simulations-of-the-early-earth-and-exoplanets.streamlit.app/
 
 How does atmospheric photochemistry and ozone evolve as O₂ is increased from 0.1% the present atmospheric level (PAL) to modern day concentrations? This is a question that has been investigated for over 5 decades. Models have been run independently, but we wanted to see how models compared when starting from the same boundary conditions.
 
