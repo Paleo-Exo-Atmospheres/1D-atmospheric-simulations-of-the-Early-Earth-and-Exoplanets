@@ -220,8 +220,8 @@ Post-processing pipeline for calculate surface habitability using the [Troposphe
 │   ├── ussa.ozone          | Overwritten by run_TUV.py each run
 │   └── *.orig_backup       | One-time backup of stock USSA files
 ├── DATAS1/                 | Biological action spectra (DNA, erythema, plant, …)
-├── OUTPUT/compare/         | Archived runs, summary CSVs, plots
-│   └── plot_tuv_comparison.py
+├── OUTPUT/compare/         
+│   └── plot_tuv_comparison.py | Archived runs, summary CSVs, plots
 
 Used to assess how model and boundary-condition differences propagate into predictions of the surface UV environment and calculations for surface habitability on the early Earth. 
 
