@@ -1,7 +1,9 @@
 # 1D Simulations of the Early Earth and Exoplanets
 
-**Authors:** Akhil Kumar & Gregory J. Cooke  
-**Affiliation:** Institute of Astronomy, University of Cambridge
+**Authors:** Akhil Kumar<sup>1, 2</sup> & Gregory J. Cooke<sup>1</sup>  
+**Affiliations:**  
+<sup>1</sup> Institute of Astronomy, University of Cambridge, UK
+<sup>2</sup> Department of Earth and Planetary Sciences, Harvard University, USA
 
 ## Overview
 
