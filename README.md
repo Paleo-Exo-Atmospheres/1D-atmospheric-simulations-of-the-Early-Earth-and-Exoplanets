@@ -9,7 +9,7 @@ This repository accompanies the paper **"Simulations of the Evolving Ozone Layer
 
 How does atmospheric photochemistry and ozone evolve as O₂ is increased from 0.1% the present atmospheric level (PAL) to modern day concentrations? This is a question that has been investigated for over 5 decades. Models have been run independently, but we wanted to see how models compared when starting from the same boundary conditions.
 
-In terms of Earth's history, the rise in oxygen we are considering roughly corresponds to the early Proterozoic (~2.4 Gyr onward) through the oxygenation events of the Phanerozoic to modern conditions. We simulate this evolution using four independent one-dimensional (1D) photochemical models, compared against **WACCM6**, a 3D chemistry-climate model. WACCM6 is a high-top extension of a configuration of the Community Earth System Model (CESM2) that includes interactive atmospheric chemistry.
+In terms of Earth's history, the rise in oxygen we are considering roughly corresponds to the early Proterozoic (~2.4 Gyr onward) through the oxygenation events of the Phanerozoic to modern conditions. We investigate this using 7 models in total, including five models to simulate the evolution of the atmosphere, and two models to quantify the implications of our results for the surface habitability of the early Earth and observational predictions for Exoplanets. Our atmospheric simulations include four independent one-dimensional (1D) photochemical models (**Photochem, Atmos, VULCAN and the Kasting 1D model**), and the 3D Chemistry-Climate model **WACCM6**. WACCM6 is a high-top extension of a configuration of the Community Earth System Model (CESM2) that includes interactive atmospheric chemistry. The models we use to investigate the implications of our results include **PSG** and **TUV**. 
 
 We systematically vary:
 
@@ -45,6 +45,7 @@ All four 1D models are run with harmonised boundary conditions where possible (m
 | **TUV** | Tropospheric Ultraviolet and Visible Radiation Model - a radiative transfer model developed by the National Center for Atmospheric Research to calculate solar UV and visible radiation throughout Earth's atmosphere and at the surface | [https://github.com/NCAR/tuv-x](https://github.com/NCAR/tuv-x) |
 
 Both models use simulated atmospheres as inputs for calculations. 
+
 ---
 
 ## Oxygenation states
