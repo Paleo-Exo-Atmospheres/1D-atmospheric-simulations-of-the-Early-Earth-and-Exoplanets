@@ -25,7 +25,7 @@ We quantify how model choice and boundary-condition assumptions affect ozone col
 
 ---
 
-## Models used
+## Atmospheric Models used
 
 | Model | Description | Repository |
 |-------|-------------|------------|
@@ -37,6 +37,14 @@ We quantify how model choice and boundary-condition assumptions affect ozone col
 
 All four 1D models are run with harmonised boundary conditions where possible (matching lower-boundary mixing ratios, stellar spectra, and WACCM6 P–T profiles) so that differences in output reflect genuine model physics rather than inconsistent inputs.
 
+## Additional Models used
+
+| Model | Description | Repository |
+|-------|-------------|------------|
+| **PSG** | Planetary Spectrum generator - online radiative transfer model suite for synthesising and retrieving planetary spectra, developed by NASA Goddard Space Flight Center | [https://github.com/nasapsg](https://github.com/nasapsg) |
+| **TUV** | Tropospheric Ultraviolet and Visible Radiation Model - a radiative transfer model developed by the National Center for Atmospheric Research to calculate solar UV-Vis visible radiation throughout Earth's atmosphere and at the surface | [https://github.com/NCAR/tuv-x](https://github.com/NCAR/tuv-x) |
+
+Both models use simulated atmospheres as inputs for calculations. 
 ---
 
 ## Oxygenation states
@@ -69,6 +77,7 @@ Solar-age labels such as `Sun_0.0Ga` (present Sun) and `Sun_2.4Ga` (younger Sun)
 ├── WACCM6/                 # WACCM6 files
 ├── Python/                 # Analysis and plotting scripts
 ├── PSG/                    # Planetary Spectrum Generator post-processing
+├── TUV_mod/                # TUV post-processing
 ├── Plots/                  # Interactive explorer
 └── README.md
 ```
@@ -191,6 +200,31 @@ Used to assess how model and boundary-condition differences propagate into obser
 
 ---
 
+### `TUV/`
+
+Post-processing pipeline for calculate surface habitability using the [Tropospheric Ultraviolet and Visible Radiation Model (TUV)](https://github.com/NCAR/tuv-x). The scripts use 1D model inputs to calculate surface DNA damage due to UV. 
+
+| File | Purpose |
+|------|---------|
+├── TUV.f, *.f              | Fortran source (see modifications in TUV file README)
+├── Makefile
+├── run_TUV.py              | Main driver: installs atmospheres, runs TUV, archive
+├── INPUTS/
+│   ├── defin1–defin5       | Stock NCAR defaults
+│   ├── Z1_pc               | Batch template (0.1% PAL settings, SZA sweep, bio weights)
+│   ├── PI, One_pc, Ten_pc  | Other PAL input decks
+│   └── usrinp              | Generated each batch run
+├── DATAE1/ATM/
+│   ├── ussa.temp           | Overwritten by run_TUV.py each run
+│   ├── ussa.ozone          | Overwritten by run_TUV.py each run
+│   └── *.orig_backup       | One-time backup of stock USSA files
+├── DATAS1/                 | Biological action spectra (DNA, erythema, plant, …)
+├── OUTPUT/compare/         | Archived runs, summary CSVs, plots
+│   └── plot_tuv_comparison.py
+
+Used to assess how model and boundary-condition differences propagate into predictions of the surface UV environment and calculations for surface habitability on the early Earth. 
+
+
 ## Key simulation suites
 
 ### Baseline O₂–O₃ grid
@@ -229,6 +263,7 @@ If you use this dataset or the associated models, please cite the paper (citatio
 - **Atmos:** Arney, G. et al. (2016), *The Pale Orange Dot: The Spectrum and Habitability of Hazy Archean Earth*, Astrobiology, 16, 873. [doi:10.1089/ast.2015.1422](https://doi.org/10.1089/ast.2015.1422)
 - **WACCM6 / CESM:** A. Gettelman et al. (2019), The Whole Atmosphere Community Climate Model Version 6 (WACCM6), [https://agupubs.onlinelibrary.wiley.com/doi/full/10.1029/2019JD030943](https://agupubs.onlinelibrary.wiley.com/doi/full/11.1029/2019JD030943), see [ESCOMP/CESM](https://github.com/ESCOMP/CESM)
 - **Planetary Spectrum Generator (PSG):** Villanueva, G. L., et al.(2018), *Planetary Spectrum Generator: An accurate online radiative transfer suite for atmospheres, comets, small bodies and exoplanets*, Journal of Quantitative Spectroscopy and Radiative Transfer, 217, 86-104. [doi:10.1016/j.jqsrt.2018.05.023] (https://doi.org/10.1016/j.jqsrt.2018.05.023)
+- **Tropospheric Ultraviolet and Visible (TUV) Radiation Model:** Madronich, Sasha, and Siri Flocke (1999), *The role of solar radiation in atmospheric chemistry*, in Handbook of Environmental Chemistry, edited by P. Boule, pp. 1-26, Springer-Verlag, Heidelberg. [https://doi.org/10.1007/978-3-540-69044-3_1] (https://doi.org/10.1007/978-3-540-69044-3_1)
 
 ---
 
