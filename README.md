@@ -42,7 +42,7 @@ All four 1D models are run with harmonised boundary conditions where possible (m
 | Model | Description | Repository |
 |-------|-------------|------------|
 | **PSG** | Planetary Spectrum generator - online radiative transfer model suite for synthesising and retrieving planetary spectra, developed by NASA Goddard Space Flight Center | [https://github.com/nasapsg](https://github.com/nasapsg) |
-| **TUV** | Tropospheric Ultraviolet and Visible Radiation Model - a radiative transfer model developed by the National Center for Atmospheric Research to calculate solar UV-Vis visible radiation throughout Earth's atmosphere and at the surface | [https://github.com/NCAR/tuv-x](https://github.com/NCAR/tuv-x) |
+| **TUV** | Tropospheric Ultraviolet and Visible Radiation Model - a radiative transfer model developed by the National Center for Atmospheric Research to calculate solar UV and visible radiation throughout Earth's atmosphere and at the surface | [https://github.com/NCAR/tuv-x](https://github.com/NCAR/tuv-x) |
 
 Both models use simulated atmospheres as inputs for calculations. 
 ---
