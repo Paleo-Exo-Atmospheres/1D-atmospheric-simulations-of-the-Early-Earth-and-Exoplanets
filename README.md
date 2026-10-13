@@ -207,20 +207,20 @@ Post-processing pipeline for calculate surface habitability using the [Troposphe
 
 | File | Purpose |
 |------|---------|
-├── TUV.f, *.f              | Fortran source (see modifications in TUV file README)
-├── Makefile
-├── run_TUV.py              | Main driver: installs atmospheres, runs TUV, archive
-├── INPUTS/
-│   ├── defin1–defin5       | Stock NCAR defaults
+| TUV.f, *.f              | Fortran source (see modifications in TUV file README)
+| Makefile
+| run_TUV.py              | Main driver: installs atmospheres, runs TUV, archive
+| INPUTS/
+│   ├ defin1–defin5       | Stock NCAR defaults
 │   ├── Z1_pc               | Batch template (0.1% PAL settings, SZA sweep, bio weights)
 │   ├── PI, One_pc, Ten_pc  | Other PAL input decks
 │   └── usrinp              | Generated each batch run
-├── DATAE1/ATM/
+| DATAE1/ATM/
 │   ├── ussa.temp           | Overwritten by run_TUV.py each run
 │   ├── ussa.ozone          | Overwritten by run_TUV.py each run
 │   └── *.orig_backup       | One-time backup of stock USSA files
-├── DATAS1/                 | Biological action spectra (DNA, erythema, plant, …)
-├── OUTPUT/compare/         
+| DATAS1/                 | Biological action spectra (DNA, erythema, plant, …)
+| OUTPUT/compare/         
 │   └── plot_tuv_comparison.py | Archived runs, summary CSVs, plots
 
 Used to assess how model and boundary-condition differences propagate into predictions of the surface UV environment and calculations for surface habitability on the early Earth. 
